@@ -4,6 +4,8 @@
 #include "facile.y.h"
 %}
 
+%option yylineno
+
 %%
 
 if {

@@ -3,52 +3,55 @@
 #include <stdlib.h>
 
 extern int yylex();
-extern void yyerror(const char *msg);
+extern int yyerror(const char *msg);
+extern int yylineno;
 %}
 
-%token TOK_IF
-%token TOK_THEN
-%token TOK_ELSE
-%token TOK_ELSEIF
-%token TOK_ENDIF
+%define parse.error verbose
 
-%token TOK_NOT
-%token TOK_AND
-%token TOK_OR
+%token TOK_IF             "if"
+%token TOK_THEN           "then"
+%token TOK_ELSE           "else"
+%token TOK_ELSEIF         "elseif"
+%token TOK_ENDIF          "endif"
 
-%token TOK_PRINT
-%token TOK_READ
+%token TOK_NOT            "not"
+%token TOK_AND            "and"
+%token TOK_OR             "or"
 
-%token TOK_WHILE
-%token TOK_DO
-%token TOK_ENDWHILE
+%token TOK_PRINT          "print"
+%token TOK_READ           "read"
 
-%token TOK_CONTINUE
-%token TOK_BREAK
-%token TOK_END
+%token TOK_WHILE          "while"
+%token TOK_DO             "do"
+%token TOK_ENDWHILE       "endwhile"
 
-%token TOK_ASSIGN
+%token TOK_CONTINUE       "continue"
+%token TOK_BREAK          "break"
+%token TOK_END            "end"
 
-%token TOK_IDENTIFIER
-%token TOK_NUMBER
+%token TOK_ASSIGN         ":="
 
-%token TOK_PLUS
-%token TOK_MINUS
-%token TOK_MULT
-%token TOK_DIV
-%token TOK_MOD
+%token TOK_IDENTIFIER     "identifier"
+%token TOK_NUMBER         "number"
 
-%token TOK_TRUE
-%token TOK_FALSE
+%token TOK_PLUS           "+"
+%token TOK_MINUS          "-"
+%token TOK_MULT           "*"
+%token TOK_DIV            "/"
+%token TOK_MOD            "%"
 
-%token TOK_LT
-%token TOK_GT
-%token TOK_LTE
-%token TOK_GTE
-%token TOK_EQ
+%token TOK_TRUE           "true"
+%token TOK_FALSE          "false"
 
-%token TOK_LPAREN
-%token TOK_RPAREN
+%token TOK_LT             "<"
+%token TOK_GT             ">"
+%token TOK_LTE            "<="
+%token TOK_GTE            ">="
+%token TOK_EQ             "=="
+
+%token TOK_LPAREN         "("
+%token TOK_RPAREN         ")"
 
 %%
 
@@ -73,9 +76,9 @@ number:
 
 %%
 
-void yyerror(const char *msg)
+int yyerror(const char *msg)
 {
-  fprintf(stderr, "[ERROR] %s : ", msg);
+  fprintf(stderr, "[ERROR] Line %d: %s : ", yylineno, msg);
 }
 
 int main(int argc, char **argv)
