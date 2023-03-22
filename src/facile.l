@@ -1,61 +1,7 @@
 %{
 #include <assert.h>
 
-// Conditional
-#define TOK_IF              258
-#define TOK_THEN            259
-#define TOK_ELSE            260
-#define TOK_ELSEIF          261
-#define TOK_ENDIF           262
-
-#define TOK_NOT             263
-#define TOK_AND             264
-#define TOK_OR              265
-
-// I/O
-#define TOK_READ            266
-#define TOK_PRINT           267
-
-// While loop
-#define TOK_WHILE           268
-#define TOK_DO              269
-#define TOK_ENDWHILE        270
-
-// Control flow
-#define TOK_CONTINUE        271
-#define TOK_BREAK           272
-#define TOK_END             273
-
-// Boolean literals
-#define TOK_TRUE            274
-#define TOK_FALSE           275
-
-// Comparison operators
-#define TOK_EQ              276
-#define TOK_GT              277
-#define TOK_LT              278
-#define TOK_GTE             279
-#define TOK_LTE             280
-
-// Arithmetic operators
-#define TOK_PLUS            281
-#define TOK_MINUS           282
-#define TOK_MULT            283
-#define TOK_DIV             284
-#define TOK_MOD             285
-
-// Assignment operator
-#define TOK_ASSIGN          286
-
-// Other
-#define TOK_LPAREN          287
-#define TOK_RPAREN          288
-
-// Identifier
-#define TOK_IDENTIFIER      289
-
-// Number
-#define TOK_NUMBER          290
+#include "facile.y.h"
 %}
 
 %%
@@ -215,7 +161,7 @@ false {
   return TOK_RPAREN;
 }
 
-[a-zA-Z][a-zA-Z0-9]* {
+[a-zA-Z][a-zA-Z0-9_]* {
   assert(printf("identifier '%s' token found", yytext));
   return TOK_IDENTIFIER;
 }
@@ -225,6 +171,9 @@ false {
   return TOK_NUMBER;
 }
 
-[ab]*a[ab]*b[ab]*b[ab]*a assert(printf("'abba' token found")); return yytext[0];
+[ \t\n] ;
 
+. {
+  ECHO;
+}
 %%
