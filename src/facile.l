@@ -4,10 +4,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <glib.h>
+
 #include "facile.y.h"
 
 void yyerror(const char *msg);
 int yylex();
+
+void begin_code();
+void end_code();
 
 %}
 

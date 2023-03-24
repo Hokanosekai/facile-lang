@@ -2,26 +2,27 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <glib.h>
+
 extern int yylineno;
 
 int yylex();
 void yyerror(const char *msg);
 
-int symbol_table[52];
+GHashTable* symbol_hash_table;
 
-int compute(char symbol);
+void produce_code(GNode* node);
 
-int symbol_lookup(char symbol);
-int symbol_insert(char symbol, int value);
+void begin_code();
+void end_code();
 
 %}
 
 %union {
-  char   *id;
-  int    num;
+  gchar   *id;
+  gulong  num;
+  GNode   *node;
 }
-
-%start line
 
 %token              TOK_IF             
 %token              TOK_THEN           
@@ -67,92 +68,147 @@ int symbol_insert(char symbol, int value);
 %token              TOK_LPAREN         
 %token              TOK_RPAREN         
 
-%type<num> line expression litteral arithmetic logical comparison number
-%type<id> statement assignement read print identifier
+%type               <node> code
+%type               <node> expression
+%type               <node> assignement
+%type               <node> print
+%type               <node> read
+%type               <node> statement
+%type               <node> identifier
+%type               <node> number
+%type               <node> arithmetic
+%type               <node> comparison
+%type               <node> litteral
 
 %%
 
-line:
-  print             {;} |
-  read              {;} |
-  assignement       {;} |
-  statement         {;} |
-  expression        {;} |
-  line read         {;} |
-  line print        {;} |
-  line assignement  {;} |
-  line statement    {;} |
-  line expression   {;} 
+program: code {
+  begin_code();
+  produce_code($1);
+  end_code();
+}
+
+code:
+  code statement {
+    $$ = g_node_new("code");
+    g_node_append($$, $1);
+    g_node_append($$, $2);
+  } |
+  {
+    $$ = g_node_new("");
+  }
+
+statement:
+  assignement |
+  print       |
+  read
 ;
 
+
 assignement:
-  identifier TOK_ASSIGN expression {symbol_insert($1, $3);}
+  identifier TOK_ASSIGN expression {
+    $$ = g_node_new("assignement");
+    g_node_append($$, $1);
+    g_node_append($$, $3);
+  }
 ;
 
 print:
-  TOK_PRINT expression {printf("%d\n", $2);}
+  TOK_PRINT expression {
+    $$ = g_node_new("print");
+    g_node_append($$, $2);
+  }
 ;
 
 read:
-  TOK_READ identifier {int value; scanf("%d", &value); symbol_insert($2, value);}
-;
-
-
-statement:
-  if        {;} |
-  while     {;}
-;
-
-if:
-  TOK_IF expression TOK_THEN statement {;}
-;
-
-while:
-  TOK_WHILE expression TOK_DO statement {;}
+  TOK_READ identifier {
+    $$ = g_node_new("read");
+    g_node_append($$, $2);
+  }
 ;
 
 expression:
   litteral                          {;} |
   arithmetic                        {;} |
-  logical                           {;} |
-  comparison                        {;} |
+  comparison                        {;}
 ;
 
 arithmetic:
-  expression TOK_PLUS   expression  { $$ = $1 + $3; } |
-  expression TOK_MINUS  expression  { $$ = $1 - $3; } |
-  expression TOK_MULT   expression  { $$ = $1 * $3; } |
-  expression TOK_DIV    expression  { $$ = $1 / $3; } |
-  expression TOK_MOD    expression  { $$ = $1 % $3; }
-;
-
-logical:
-  expression TOK_AND  expression    { $$ = $1 && $3;} |
-  expression TOK_OR   expression    { $$ = $1 || $3;} |
-  TOK_NOT expression                { $$ = !$2; }
+  expression TOK_PLUS   expression  {
+    $$ = g_node_new("add");
+    g_node_append($$, $1);
+    g_node_append($$, $3);
+  } |
+  expression TOK_MINUS  expression  {
+    $$ = g_node_new("sub");
+    g_node_append($$, $1);
+    g_node_append($$, $3);
+  } |
+  expression TOK_MULT   expression  {
+    $$ = g_node_new("mul");
+    g_node_append($$, $1);
+    g_node_append($$, $3);
+  } |
+  expression TOK_DIV    expression  {
+    $$ = g_node_new("div");
+    g_node_append($$, $1);
+    g_node_append($$, $3);
+  } |
+  expression TOK_MOD    expression  {
+    $$ = g_node_new("mod");
+    g_node_append($$, $1);
+    g_node_append($$, $3);
+  }
 ;
 
 comparison:
-  expression TOK_LT   expression    { $$ = $1 < $3; }   |
-  expression TOK_GT   expression    { $$ = $1 > $3; }   |
-  expression TOK_LTE  expression    { $$ = $1 <= $3; }  |
-  expression TOK_GTE  expression    { $$ = $1 >= $3; }  |
-  expression TOK_EQ   expression    { $$ = $1 == $3; }
+  expression TOK_LT   expression    {
+    printf(" clt\n");
+  }   |
+  expression TOK_GT   expression    {
+    printf(" cgt\n");
+  }   |
+  expression TOK_LTE  expression    {
+    printf(" clt\n");
+    printf(" ldc.i4.0\n");
+    printf(" ceq\n");
+  }  |
+  expression TOK_GTE  expression    {
+    printf(" cgt\n");
+    printf(" ldc.i4.0\n");
+    printf(" ceq\n");
+  }  |
+  expression TOK_EQ   expression    {
+    printf(" ceq\n");
+  }
 ;
 
 litteral:
-  identifier  { $$ = symbol_lookup($1);}  |
-  number      { $$ = $1; }                |
-  TOK_TRUE    { $$ = 1; }                 |
-  TOK_FALSE   { $$ = 0; }
+  identifier  {;}                         |
+  number      {;}
 ;
 
 identifier:
-  IDENTIFIER  { $$ = $1; }
+  IDENTIFIER  {
+    $$ = g_node_new("identifier");
+    if (!symbol_hash_table) {
+      printf("Creating symbol hash table\n");
+      symbol_hash_table = g_hash_table_new(g_str_hash, g_str_equal);
+    }
+    gulong value = (gulong) g_hash_table_lookup(symbol_hash_table, $1);
+    if (!value) {
+      value = g_hash_table_size(symbol_hash_table) + 1;
+      g_hash_table_insert(symbol_hash_table, strdup($1), (gpointer) value);
+    }
+    g_node_append_data($$, (gpointer)value);
+  }
 ;
 
 number:
-  NUMBER      { $$ = $1; }
+  NUMBER      { 
+    $$ = g_node_new("number");
+    g_node_append_data($$, (gpointer)$1);
+  }
 ;
 
 %%
@@ -162,40 +218,66 @@ void yyerror(const char *msg)
   fprintf(stderr, "[ERROR] Line %d: %s : ", yylineno, msg);
 }
 
-int compute(char symbol)
+void begin_code()
 {
-  int idx = -1;
-  if (isupper(symbol)) {
-    idx = symbol - 'A';
-  } else if (islower(symbol)) {
-    idx = symbol - 'a' + 26;
-  }
-  return idx;
+  printf(".assembly extern mscorlib {}\n");
+  printf(".assembly program {}\n");
+  printf(".module program.exe\n");
+  printf(".class public program\n");
+  printf("{\n");
+  printf(".method public static void main()\n");
+  printf("{\n");
+  printf(".entrypoint\n");
+  printf(".maxstack 100\n");
 }
 
-int symbol_lookup(char symbol)
+void end_code()
 {
-  int bucket = compute(symbol);
-  if (bucket == -1) {
-    fprintf(stderr, "Invalid symbol: %c\n", symbol);
-    return -1;
-  }
-
-  printf("Looking up symbol: %c, value: %d\n", symbol, symbol_table[bucket]);
-
-  return symbol_table[bucket];
+  printf("ret\n");  
+  printf("}\n");
+  printf("}\n");
 }
 
-int symbol_insert(char symbol, int value)
+void produce_code(GNode *node)
 {
-  int bucket = compute(symbol);
-  if (bucket == -1) {
-    fprintf(stderr, "Invalid symbol: %c\n", symbol);
-    return -1;
+  if (node == NULL) {
+    printf("Node is NULL\n");
+    return;
   }
 
-  symbol_table[bucket] = value;
-  return 0;
+  /**printf("Node name: %s, data: %p, children: %d, parent: %p, next: %p, prev: %p\n",
+         (char *) node->data, node->data, g_node_n_children(node), node->parent, node->next, node->prev);
+*/
+  if (strcmp(node->data, "code") == 0) {
+    produce_code(g_node_nth_child(node, 0));
+    produce_code(g_node_nth_child(node, 1));
+  } else if (strcmp(node->data, "assignement") == 0) {
+    produce_code(g_node_nth_child(node, 1));
+    printf(" stloc\t%ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data);
+  } else if (strcmp(node->data, "print") == 0) {
+    produce_code(g_node_nth_child(node, 0));
+    printf(" call void class [mscorlib]System.Console::WriteLine(int32)\n");
+  } else if (node->data == "number") {
+    printf(" ldc.i4\t%ld\n", (long)g_node_nth_child(node, 0)->data);
+  } else if (node->data == "identifier") {
+    printf(" ldloc\t%ld\n", (long)g_node_nth_child(node, 0)->data - 1);
+  } else if (node->data == "add") {
+    produce_code(g_node_nth_child(node, 0));
+    produce_code(g_node_nth_child(node, 1));
+    printf(" add\n");
+  } else if (node->data == "sub") {
+    produce_code(g_node_nth_child(node, 0));
+    produce_code(g_node_nth_child(node, 1));
+    printf(" sub\n");
+  } else if (node->data == "mul") {
+    produce_code(g_node_nth_child(node, 0));
+    produce_code(g_node_nth_child(node, 1));
+    printf(" mul\n");
+  } else if (node->data == "div") {
+    produce_code(g_node_nth_child(node, 0));
+    produce_code(g_node_nth_child(node, 1));
+    printf(" div\n");
+  } 
 }
 
 int main(int argc, char **argv)
@@ -219,14 +301,10 @@ int main(int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  size_t i;
-  for (i = 0; i < 52; i++) {
-    symbol_table[i] = 0;
-  }
-
   // Parse the file
   yyparse();
 
   // Close the file
   fclose(file);
 }
+

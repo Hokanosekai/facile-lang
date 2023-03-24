@@ -1,6 +1,1 @@
-read a
-read b
-
-c := a + b
-
-print c
+print 1 + 1

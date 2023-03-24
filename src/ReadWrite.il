@@ -51,3 +51,14 @@
 
   } // end of class ReadWrite
 
+
+
+logical:
+  expression TOK_AND  expression    { $$ = $1 && $3;} |
+  expression TOK_OR   expression    { $$ = $1 || $3;} |
+  TOK_NOT expression                { $$ = !$2; }
+;
+
+|
+  TOK_TRUE    { $$ = 1; }                 |
+  TOK_FALSE   { $$ = 0; }
