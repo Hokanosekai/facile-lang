@@ -9,10 +9,10 @@ void yyerror(const char *msg);
 
 int symbol_table[52];
 
-int compute(char *symbol)
+int compute(char symbol);
 
-int symbol_lookup(char *symbol);
-int symbol_insert(char *symbol, int value);
+int symbol_lookup(char symbol);
+int symbol_insert(char symbol, int value);
 
 %}
 
@@ -67,17 +67,22 @@ int symbol_insert(char *symbol, int value);
 %token              TOK_LPAREN         
 %token              TOK_RPAREN         
 
-%type<num> line expression litteral arithmetic logical comparison
-%type<id> statement assignement read print
+%type<num> line expression litteral arithmetic logical comparison number
+%type<id> statement assignement read print identifier
 
 %%
 
 line:
-  print         {;} |
-  read          {;} |
-  assignement   {;} |
-  statement     {;} |
-  expression    {;}
+  print             {;} |
+  read              {;} |
+  assignement       {;} |
+  statement         {;} |
+  expression        {;} |
+  line read         {;} |
+  line print        {;} |
+  line assignement  {;} |
+  line statement    {;} |
+  line expression   {;} 
 ;
 
 assignement:
@@ -107,10 +112,10 @@ while:
 ;
 
 expression:
-  litteral                          { $$ = $1; } |
-  arithmetic                        { $$ = $1; } |
-  logical                           { $$ = $1; } |
-  comparison                        { $$ = $1; } |
+  litteral                          {;} |
+  arithmetic                        {;} |
+  logical                           {;} |
+  comparison                        {;} |
 ;
 
 arithmetic:
@@ -142,6 +147,14 @@ litteral:
   TOK_FALSE   { $$ = 0; }
 ;
 
+identifier:
+  IDENTIFIER  { $$ = $1; }
+;
+
+number:
+  NUMBER      { $$ = $1; }
+;
+
 %%
 
 void yyerror(const char *msg)
@@ -149,33 +162,35 @@ void yyerror(const char *msg)
   fprintf(stderr, "[ERROR] Line %d: %s : ", yylineno, msg);
 }
 
-int compute(char *symbol)
+int compute(char symbol)
 {
   int idx = -1;
-  if (isupper(symbol[0])) {
-    idx = symbol[0] - 'A';
-  } else if (islower(symbol[0])) {
-    idx = symbol[0] - 'a' + 26;
+  if (isupper(symbol)) {
+    idx = symbol - 'A';
+  } else if (islower(symbol)) {
+    idx = symbol - 'a' + 26;
   }
   return idx;
 }
 
-int symbol_lookup(char *symbol)
+int symbol_lookup(char symbol)
 {
   int bucket = compute(symbol);
   if (bucket == -1) {
-    fprintf(stderr, "Invalid symbol: %s\n", symbol);
+    fprintf(stderr, "Invalid symbol: %c\n", symbol);
     return -1;
   }
+
+  printf("Looking up symbol: %c, value: %d\n", symbol, symbol_table[bucket]);
 
   return symbol_table[bucket];
 }
 
-int symbol_insert(char *symbol, int value)
+int symbol_insert(char symbol, int value)
 {
   int bucket = compute(symbol);
   if (bucket == -1) {
-    fprintf(stderr, "Invalid symbol: %s\n", symbol);
+    fprintf(stderr, "Invalid symbol: %c\n", symbol);
     return -1;
   }
 
