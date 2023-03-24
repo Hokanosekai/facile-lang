@@ -1,181 +1,67 @@
 %{
 #include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "facile.y.h"
+
+void yyerror(const char *msg);
+int yylex();
+
 %}
 
 %option yylineno
 
 %%
 
-if {
-  assert(printf("if token found"));
-  return TOK_IF;
-}
+"if"                        {return TOK_IF;}
+"then"                      {return TOK_THEN;}
+"else"                      {return TOK_ELSE;}
+"elseif"                    {return TOK_ELSEIF;}
+"endif"                     {return TOK_ENDIF;}
 
-then {
-  assert(printf("then token found"));
-  return TOK_THEN;
-}
+"not"                       {return TOK_NOT;}
+"and"                       {return TOK_AND;}
+"or"                        {return TOK_OR;}
 
-else {
-  assert(printf("else token found"));
-  return TOK_ELSE;
-}
+"read"                      {return TOK_READ;}
+"print"                     {return TOK_PRINT;}
 
-elseif {
-  assert(printf("elseif token found"));
-  return TOK_ELSEIF;
-}
+"while"                     {return TOK_WHILE;}
+"do"                        {return TOK_DO;}
+"endwhile"                  {return TOK_ENDWHILE;}
 
-endif {
-  assert(printf("endif token found"));
-  return TOK_ENDIF;
-}
+"continue"                  {return TOK_CONTINUE;}
+"break"                     {return TOK_BREAK;}
+"end"                       {return TOK_END;}
 
-not {
-  assert(printf("not token found"));
-  return TOK_NOT;
-}
+"true"                      {return TOK_TRUE;}
+"false"                     {return TOK_FALSE;}
 
-and {
-  assert(printf("and token found"));
-  return TOK_AND;
-}
+"=="                      {return TOK_EQ;}
+">"                       {return TOK_GT;}
+"<"                       {return TOK_LT;}
+">="                      {return TOK_GTE;}
+"<="                      {return TOK_LTE;}
 
-or {
-  assert(printf("or token found"));
-  return TOK_OR;
-}
+"+"                       {return TOK_PLUS;}
+"-"                       {return TOK_MINUS;}
+"*"                       {return TOK_MULT;}
+"/"                       {return TOK_DIV;}
+"%"                       {return TOK_MOD;}
 
-read {
-  assert(printf("read token found"));
-  return TOK_READ;
-}
+":="                      {return TOK_ASSIGN;}
 
-print {
-  assert(printf("print token found"));
-  return TOK_PRINT;
-}
+"("                       {return TOK_LPAREN;}
+")"                       {return TOK_RPAREN;}
 
-while {
-  assert(printf("while token found"));
-  return TOK_WHILE;
-}
+[a-zA-Z][a-zA-Z0-9_]*     {yylval.id = yytext[0];return IDENTIFIER;}
+[0-9]+                    {yylval.num = atoi(yytext);return NUMBER;}
 
-do {
-  assert(printf("do token found"));
-  return TOK_DO;
-}
+[ \t\n]                   ;
+.                         {ECHO; yyerror("Unexpected character");}
 
-endwhile {
-  assert(printf("endwhile token found"));
-  return TOK_ENDWHILE;
-}
-
-continue {
-  assert(printf("continue token found"));
-  return TOK_CONTINUE;
-}
-
-break {
-  assert(printf("break token found"));
-  return TOK_BREAK;
-}
-
-end {
-  assert(printf("end token found"));
-  return TOK_END;
-}
-
-true {
-  assert(printf("true token found"));
-  return TOK_TRUE;
-}
-
-false {
-  assert(printf("false token found"));
-  return TOK_FALSE;
-}
-
-"==" {
-  assert(printf("== token found"));
-  return TOK_EQ;
-}
-
-">" {
-  assert(printf("> token found"));
-  return TOK_GT;
-}
-
-"<" {
-  assert(printf("< token found"));
-  return TOK_LT;
-}
-
-">=" {
-  assert(printf(">= token found"));
-  return TOK_GTE;
-}
-
-"<=" {
-  assert(printf("<= token found"));
-  return TOK_LTE;
-}
-
-"+" {
-  assert(printf("+ token found"));
-  return TOK_PLUS;
-}
-
-"-" {
-  assert(printf("- token found"));
-  return TOK_MINUS;
-}
-
-"*" {
-  assert(printf("* token found"));
-  return TOK_MULT;
-}
-
-"/" {
-  assert(printf("/ token found"));
-  return TOK_DIV;
-}
-
-"%" {
-  assert(printf("%% token found"));
-  return TOK_MOD;
-}
-
-":=" {
-  assert(printf("= token found"));
-  return TOK_ASSIGN;
-}
-
-"(" {
-  assert(printf("( token found"));
-  return TOK_LPAREN;
-}
-
-")" {
-  assert(printf(") token found"));
-  return TOK_RPAREN;
-}
-
-[a-zA-Z][a-zA-Z0-9_]* {
-  assert(printf("identifier '%s' token found", yytext));
-  return TOK_IDENTIFIER;
-}
-
-[0-9]+ {
-  assert(printf("number '%d' token found", atoi(yytext)));
-  return TOK_NUMBER;
-}
-
-[ \t\n] ;
-
-. {
-  ECHO;
-}
 %%
+
+int yywrap (void) {return 1;}
