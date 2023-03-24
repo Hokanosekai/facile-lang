@@ -5,6 +5,8 @@
 #include <glib.h>
 
 extern int yylineno;
+extern FILE *yyin;
+extern FILE *yyout;
 
 int yylex();
 void yyerror(const char *msg);
@@ -15,6 +17,10 @@ void produce_code(GNode* node);
 
 void begin_code();
 void end_code();
+
+int maxstack = 0;
+
+char *locals = NULL;
 
 %}
 
@@ -220,22 +226,36 @@ void yyerror(const char *msg)
 
 void begin_code()
 {
-  printf(".assembly extern mscorlib {}\n");
-  printf(".assembly program {}\n");
-  printf(".module program.exe\n");
-  printf(".class public program\n");
-  printf("{\n");
-  printf(".method public static void main()\n");
-  printf("{\n");
-  printf(".entrypoint\n");
-  printf(".maxstack 100\n");
+  fprintf(yyout, ".assembly extern mscorlib {}\n");
+  fprintf(yyout, ".assembly program {}\n");
+  fprintf(yyout, ".module program.exe\n");
+  fprintf(yyout, ".class public program\n");
+  fprintf(yyout, "{\n");
+  fprintf(yyout, "\t.method public static void main()\n");
+  fprintf(yyout, "\t{\n");
+  fprintf(yyout, "\t\t.entrypoint\n");
+  fprintf(yyout, "\t\t.maxstack %d\n", maxstack);
+  fprintf(yyout, "\t\t.locals init (\n");
+  fprintf(yyout, "\t\t)\n");
+
+}
+
+void poduce_locals_variables()
+{
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, symbol_hash_table);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    // Check if the node is a assignement or a read
+
+  }
 }
 
 void end_code()
 {
-  printf("ret\n");  
-  printf("}\n");
-  printf("}\n");
+  fprintf(yyout, "\tret\n");  
+  fprintf(yyout, "\t}\n");
+  fprintf(yyout, "}\n");
 }
 
 void produce_code(GNode *node)
@@ -251,33 +271,52 @@ void produce_code(GNode *node)
   if (strcmp(node->data, "code") == 0) {
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
+
   } else if (strcmp(node->data, "assignement") == 0) {
     produce_code(g_node_nth_child(node, 1));
-    printf(" stloc\t%ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data);
+    fprintf(yyout, "\t\tstloc\t%ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data);
+    //TODO : jai besoin de .locals
+
+    maxstack += 1;
+
   } else if (strcmp(node->data, "print") == 0) {
     produce_code(g_node_nth_child(node, 0));
-    printf(" call void class [mscorlib]System.Console::WriteLine(int32)\n");
-  } else if (node->data == "number") {
-    printf(" ldc.i4\t%ld\n", (long)g_node_nth_child(node, 0)->data);
-  } else if (node->data == "identifier") {
-    printf(" ldloc\t%ld\n", (long)g_node_nth_child(node, 0)->data - 1);
-  } else if (node->data == "add") {
+    fprintf(yyout, "\t\tcall void class [mscorlib]System.Console::WriteLine(int32)\n");
+
+  } else if (strcmp(node->data, "number") == 0) {
+    fprintf(yyout, "\t\tldc.i4\t%ld\n", (long)g_node_nth_child(node, 0)->data);
+
+  } else if (strcmp(node->data, "identifier") == 0) {
+    fprintf(yyout, "\t\tldloc\t%ld\n", (long)g_node_nth_child(node, 0)->data - 1);
+
+  } else if (strcmp(node->data, "add") == 0) {
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
-    printf(" add\n");
-  } else if (node->data == "sub") {
+    fprintf(yyout, "\t\tadd\n");
+
+  } else if (strcmp(node->data, "sub") == 0) {
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
-    printf(" sub\n");
-  } else if (node->data == "mul") {
+    fprintf(yyout, "\t\tsub\n");
+
+  } else if (strcmp(node->data, "mul") == 0) {
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
-    printf(" mul\n");
-  } else if (node->data == "div") {
+    fprintf(yyout, "\t\tmul\n");
+
+  } else if (strcmp(node->data, "div") == 0) {
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
-    printf(" div\n");
-  } 
+    fprintf(yyout, "\t\tdiv\n");
+
+  } else if (strcmp(node->data, "read") == 0) {
+    fprintf(yyout, "\t\tcall int32 class [mscorlib]System.Console::ReadLine()\n");
+    fprintf(yyout, "\t\tcall int32 int32::Parse(string)\n");
+    fprintf(yyout, "\t\tstloc\t%ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data);
+    // TODO : jai besoin de .locals
+
+    maxstack += 1;
+  }
 }
 
 int main(int argc, char **argv)
@@ -300,6 +339,12 @@ int main(int argc, char **argv)
     fprintf(stderr, "Unable to open file: %s\n", argv[1]);
     return EXIT_FAILURE;
   }
+
+  locals = g_array_new(FALSE, FALSE, sizeof(gchar *));
+
+  // Set the file as the input
+  yyin = file;
+  yyout = fopen("output.il", "w");
 
   // Parse the file
   yyparse();
