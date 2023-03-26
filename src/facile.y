@@ -11,8 +11,7 @@ extern FILE *yyout;
 int yylex();
 void yyerror(const char *msg);
 
-GHashTable* symbol_hash_table;
-
+GHashTable* table;
 void produce_code(GNode* node);
 
 void begin_code();
@@ -84,14 +83,19 @@ char *locals = NULL;
 %type               <node> number
 %type               <node> arithmetic
 %type               <node> comparison
-%type               <node> litteral
+
+
+%start program
 
 %%
 
+
 program: code {
+  printf("Program\n");
   begin_code();
   produce_code($1);
   end_code();
+  g_node_destroy($1);
 }
 
 code:
@@ -105,9 +109,9 @@ code:
   }
 
 statement:
-  assignement |
-  print       |
-  read
+  assignement  {;} |
+  print        {;} |
+  read         {;}
 ;
 
 
@@ -134,9 +138,10 @@ read:
 ;
 
 expression:
-  litteral                          {;} |
   arithmetic                        {;} |
-  comparison                        {;}
+  comparison                        {;} |
+  identifier                        {;} |
+  number                            {;}
 ;
 
 arithmetic:
@@ -169,44 +174,61 @@ arithmetic:
 
 comparison:
   expression TOK_LT   expression    {
-    printf(" clt\n");
+    $$ = g_node_new("lt");
+    g_node_append($$, $1);
+    g_node_append($$, $3);
   }   |
   expression TOK_GT   expression    {
-    printf(" cgt\n");
+    $$ = g_node_new("gt");
+    g_node_append($$, $1);
+    g_node_append($$, $3);
   }   |
   expression TOK_LTE  expression    {
+    $$ = g_node_new("lte");
+    g_node_append($$, $1);
+    g_node_append($$, $3);
     printf(" clt\n");
     printf(" ldc.i4.0\n");
     printf(" ceq\n");
   }  |
   expression TOK_GTE  expression    {
+    $$ = g_node_new("gte");
+    g_node_append($$, $1);
+    g_node_append($$, $3);
     printf(" cgt\n");
     printf(" ldc.i4.0\n");
     printf(" ceq\n");
   }  |
   expression TOK_EQ   expression    {
+    $$ = g_node_new("eq");
+    g_node_append($$, $1);
+    g_node_append($$, $3);
     printf(" ceq\n");
   }
-;
-
-litteral:
-  identifier  {;}                         |
-  number      {;}
 ;
 
 identifier:
   IDENTIFIER  {
     $$ = g_node_new("identifier");
-    if (!symbol_hash_table) {
+    if (table == NULL) {
       printf("Creating symbol hash table\n");
-      symbol_hash_table = g_hash_table_new(g_str_hash, g_str_equal);
+      table = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, NULL);
     }
-    gulong value = (gulong) g_hash_table_lookup(symbol_hash_table, $1);
-    if (!value) {
-      value = g_hash_table_size(symbol_hash_table) + 1;
-      g_hash_table_insert(symbol_hash_table, strdup($1), (gpointer) value);
+    printf("Checking symbol %s in hash table\n", $1);
+
+    gulong val = (gulong) g_hash_table_lookup(table, strdup($1));
+    printf("Symbol %s has value %d\n", $1, val);
+
+    if (!val) {
+      val = g_hash_table_size(table) + 1;
+      g_hash_table_insert(table, strdup($1), (gpointer) val);
+      printf("Adding symbol %s to hash table at %d\n", $1, val);
+    } else {
+      printf("Symbol %s already in hash table at %d\n", $1, val);
     }
-    g_node_append_data($$, (gpointer)value);
+
+    g_node_append_data($$, (gpointer) val);
+    printf("\n");
   }
 ;
 
@@ -228,33 +250,18 @@ void begin_code()
 {
   fprintf(yyout, ".assembly extern mscorlib {}\n");
   fprintf(yyout, ".assembly program {}\n");
-  fprintf(yyout, ".module program.exe\n");
-  fprintf(yyout, ".class public program\n");
+  fprintf(yyout, ".method static void Main()\n");
   fprintf(yyout, "{\n");
-  fprintf(yyout, "\t.method public static void main()\n");
-  fprintf(yyout, "\t{\n");
-  fprintf(yyout, "\t\t.entrypoint\n");
-  fprintf(yyout, "\t\t.maxstack %d\n", maxstack);
-  fprintf(yyout, "\t\t.locals init (\n");
-  fprintf(yyout, "\t\t)\n");
-
-}
-
-void poduce_locals_variables()
-{
-  GHashTableIter iter;
-  gpointer key, value;
-  g_hash_table_iter_init(&iter, symbol_hash_table);
-  while (g_hash_table_iter_next(&iter, &key, &value)) {
-    // Check if the node is a assignement or a read
-
-  }
+  fprintf(yyout, "\t.entrypoint\n");
+  fprintf(yyout, "\t.maxstack %d\n", 10);
+  fprintf(yyout, "\t.locals init (\n");
+  fprintf(yyout, "\t\tint32, int32, int32\n");
+  fprintf(yyout, "\t)\n");
 }
 
 void end_code()
 {
   fprintf(yyout, "\tret\n");  
-  fprintf(yyout, "\t}\n");
   fprintf(yyout, "}\n");
 }
 
@@ -265,57 +272,79 @@ void produce_code(GNode *node)
     return;
   }
 
-  /**printf("Node name: %s, data: %p, children: %d, parent: %p, next: %p, prev: %p\n",
-         (char *) node->data, node->data, g_node_n_children(node), node->parent, node->next, node->prev);
-*/
+  printf("Producing code for node %s\n", (char*)node->data);
+
   if (strcmp(node->data, "code") == 0) {
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
 
   } else if (strcmp(node->data, "assignement") == 0) {
     produce_code(g_node_nth_child(node, 1));
-    fprintf(yyout, "\t\tstloc\t%ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data);
+    fprintf(yyout, "\tstloc\t%ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data - 1);
     //TODO : jai besoin de .locals
-
-    maxstack += 1;
-
   } else if (strcmp(node->data, "print") == 0) {
     produce_code(g_node_nth_child(node, 0));
-    fprintf(yyout, "\t\tcall void class [mscorlib]System.Console::WriteLine(int32)\n");
+    fprintf(yyout, "\tcall void class [mscorlib]System.Console::WriteLine(int32)\n");
 
   } else if (strcmp(node->data, "number") == 0) {
-    fprintf(yyout, "\t\tldc.i4\t%ld\n", (long)g_node_nth_child(node, 0)->data);
+    fprintf(yyout, "\tldc.i4\t%ld\n", (long)g_node_nth_child(node, 0)->data);
 
   } else if (strcmp(node->data, "identifier") == 0) {
-    fprintf(yyout, "\t\tldloc\t%ld\n", (long)g_node_nth_child(node, 0)->data - 1);
+    fprintf(yyout, "\tldloc\t%ld\n", (long)g_node_nth_child(node, 0)->data - 1);
 
   } else if (strcmp(node->data, "add") == 0) {
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
-    fprintf(yyout, "\t\tadd\n");
+    fprintf(yyout, "\tadd\n");
 
   } else if (strcmp(node->data, "sub") == 0) {
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
-    fprintf(yyout, "\t\tsub\n");
+    fprintf(yyout, "\tsub\n");
 
   } else if (strcmp(node->data, "mul") == 0) {
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
-    fprintf(yyout, "\t\tmul\n");
+    fprintf(yyout, "\tmul\n");
 
   } else if (strcmp(node->data, "div") == 0) {
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
-    fprintf(yyout, "\t\tdiv\n");
+    fprintf(yyout, "\tdiv\n");
 
   } else if (strcmp(node->data, "read") == 0) {
-    fprintf(yyout, "\t\tcall int32 class [mscorlib]System.Console::ReadLine()\n");
-    fprintf(yyout, "\t\tcall int32 int32::Parse(string)\n");
-    fprintf(yyout, "\t\tstloc\t%ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data);
+    fprintf(yyout, "\tcall string class [mscorlib]System.Console::ReadLine()\n");
+    fprintf(yyout, "\tcall int32 int32::Parse(string)\n");
+    fprintf(yyout, "\tstloc\t%ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data - 1);
     // TODO : jai besoin de .locals
 
-    maxstack += 1;
+  } else if (strcmp(node->data, "lt") == 0) {
+    produce_code(g_node_nth_child(node, 0));
+    produce_code(g_node_nth_child(node, 1));
+    fprintf(yyout, "\tclt\n");
+
+  } else if (strcmp(node->data, "gt") == 0) {
+    produce_code(g_node_nth_child(node, 0));
+    produce_code(g_node_nth_child(node, 1));
+    fprintf(yyout, "\tcgt\n");
+
+  } else if (strcmp(node->data, "eq") == 0) {
+    produce_code(g_node_nth_child(node, 0));
+    produce_code(g_node_nth_child(node, 1));
+    fprintf(yyout, "\tceq\n");
+
+  } else if (strcmp(node->data, "lte") == 0) {
+    produce_code(g_node_nth_child(node, 0));
+    produce_code(g_node_nth_child(node, 1));
+    fprintf(yyout, "\tclt\n");
+    fprintf(yyout, "\txor\tbool\ttrue\t\t// bool::op_Inequality(bool, bool)\n");
+  
+  } else if (strcmp(node->data, "gte") == 0) {
+    produce_code(g_node_nth_child(node, 0));
+    produce_code(g_node_nth_child(node, 1));
+    fprintf(yyout, "\tcgt\n");
+    fprintf(yyout, "\txor\tbool\ttrue\t\t// bool::op_Inequality(bool, bool)\n");
+  
   }
 }
 
@@ -340,8 +369,6 @@ int main(int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  locals = g_array_new(FALSE, FALSE, sizeof(gchar *));
-
   // Set the file as the input
   yyin = file;
   yyout = fopen("output.il", "w");
@@ -353,3 +380,43 @@ int main(int argc, char **argv)
   fclose(file);
 }
 
+int finsert (FILE* file, const char *buffer, int line) {
+  char *pos;
+  char *file_buffer;
+  int offset;
+
+  if (file == NULL || buffer == NULL) {
+    return -1;
+  }
+
+  // Allocate memory for the file buffer as the size of the file
+  fseek(file, 0, SEEK_END);
+  file_buffer = malloc(ftell(file));
+  if (file_buffer == NULL) {
+    return -1;
+  }
+
+  pos = file_buffer;
+  for (int i = 1; i < line; i++) {
+    pos = strchr(pos, '\n');
+    if (pos == NULL) {
+      return -1;
+    }
+
+    pos++;
+  }
+
+  offset = strlen(buffer) + strlen(file_buffer) + 1;
+
+  // Move the file buffer to the end of the buffer
+  memmove(pos + strlen(buffer), pos, strlen(pos) + 1);
+  strncpy(pos, buffer, strlen(buffer));
+
+  // Move the file pointer to the beginning of the file
+  fseek(file, 0, SEEK_SET);
+
+  // Write the file buffer to the file
+  fwrite(file_buffer, offset, 1, file);
+
+  return 0;
+}

@@ -61,7 +61,7 @@ void end_code();
 "("                       {return TOK_LPAREN;}
 ")"                       {return TOK_RPAREN;}
 
-[a-zA-Z][a-zA-Z0-9_]*     {yylval.id = yytext[0];return IDENTIFIER;}
+[a-zA-Z][a-zA-Z0-9_]*     {yylval.id = yytext;return IDENTIFIER;}
 [0-9]+                    {yylval.num = atoi(yytext);return NUMBER;}
 
 [ \t\n]                   ;
