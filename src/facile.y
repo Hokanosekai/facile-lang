@@ -246,6 +246,22 @@ void yyerror(const char *msg)
   fprintf(stderr, "[ERROR] Line %d: %s : ", yylineno, msg);
 }
 
+void produce_locals()
+{
+  fprintf(yyout, "\t.locals init (");
+  for (int i = 1; i <= g_hash_table_size(table); i++) {
+    if (i == 0) fprintf(yyout, "\n\t\t");
+
+    fprintf(yyout, "int32");
+    if (i < g_hash_table_size(table)) {
+      fprintf(yyout, ", ");
+    } else {
+      fprintf(yyout, "\n");
+    }
+  }
+  fprintf(yyout, ")\n");
+}
+
 void begin_code()
 {
   fprintf(yyout, ".assembly extern mscorlib {}\n");
@@ -253,10 +269,8 @@ void begin_code()
   fprintf(yyout, ".method static void Main()\n");
   fprintf(yyout, "{\n");
   fprintf(yyout, "\t.entrypoint\n");
-  fprintf(yyout, "\t.maxstack %d\n", 10);
-  fprintf(yyout, "\t.locals init (\n");
-  fprintf(yyout, "\t\tint32, int32, int32\n");
-  fprintf(yyout, "\t)\n");
+  fprintf(yyout, "\t.maxstack %d\n", g_hash_table_size(table));
+  produce_locals();
 }
 
 void end_code()
@@ -313,6 +327,8 @@ void produce_code(GNode *node)
     fprintf(yyout, "\tdiv\n");
 
   } else if (strcmp(node->data, "read") == 0) {
+    fprintf(yyout, "\tldstr\t\"%s\"\n", "> ");
+    fprintf(yyout, "\tcall void class [mscorlib]System.Console::Write(string)\n");
     fprintf(yyout, "\tcall string class [mscorlib]System.Console::ReadLine()\n");
     fprintf(yyout, "\tcall int32 int32::Parse(string)\n");
     fprintf(yyout, "\tstloc\t%ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data - 1);
