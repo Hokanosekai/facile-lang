@@ -12,18 +12,33 @@ int yylex();
 void yyerror(const char *msg);
 
 GHashTable* table;
-int produce_code(GNode* node);
+void emit_code(GNode* node);
+
+void emit_locals(int n);
 
 void emit_label(int label);
+void emit_instruction();
+
+void emit_ret();
+void emit_nop();
+
+void emit_statement(GNode* node);
+void emit_assignement(GNode* node);
+void emit_print(GNode* node);
+void emit_read(GNode* node);
 void emit_if(GNode* node);
 void emit_if_else(GNode* node);
+
+void emit_expression(GNode* node);
+void emit_binary_expression(GNode* node);
+void emit_unary_expression(GNode* node);
+void emit_identifier(GNode* node);
+void emit_number(GNode* node);
 
 void begin_code();
 void end_code();
 
 int maxstack = 0;
-
-char *locals = NULL;
 
 int instr = 0;
 int label = 0;
@@ -89,8 +104,8 @@ int label = 0;
 %type               <node> statement
 %type               <node> identifier
 %type               <node> number
-%type               <node> arithmetic
-%type               <node> comparison
+%type               <node> binary
+%type               <node> unary
 
 
 %start program
@@ -101,7 +116,7 @@ int label = 0;
 program: code {
   printf("Program\n");
   begin_code();
-  produce_code($1);
+  emit_code($1);
   end_code();
   g_node_destroy($1);
 }
@@ -119,12 +134,25 @@ code:
   {
     $$ = g_node_new("");
   }
+;
 
 statement:
-  assignement  |
-  print        |
-  read         |
-  if           
+  assignement  {
+    $$ = g_node_new("statement");
+    g_node_append($$, $1);
+  } |
+  print        {
+    $$ = g_node_new("statement");
+    g_node_append($$, $1);
+  } |
+  read         {
+    $$ = g_node_new("statement");
+    g_node_append($$, $1);
+  } |
+  if            {
+    $$ = g_node_new("statement");
+    g_node_append($$, $1);
+  }
 ;
 
 assignement:
@@ -165,13 +193,19 @@ if:
 
 
 expression:
-  arithmetic                        {;} |
-  comparison                        {;} |
+  binary                            {
+    $$ = g_node_new("binary");
+    g_node_append($$, $1);
+  } |
+  unary                            {
+    $$ = g_node_new("unary");
+    g_node_append($$, $1);
+  } |
   identifier                        {;} |
   number                            {;}
 ;
 
-arithmetic:
+binary:
   expression TOK_PLUS   expression  {
     $$ = g_node_new("add");
     g_node_append($$, $1);
@@ -196,10 +230,7 @@ arithmetic:
     $$ = g_node_new("mod");
     g_node_append($$, $1);
     g_node_append($$, $3);
-  }
-;
-
-comparison:
+  } |
   expression TOK_LT   expression    {
     $$ = g_node_new("lt");
     g_node_append($$, $1);
@@ -224,6 +255,13 @@ comparison:
     $$ = g_node_new("eq");
     g_node_append($$, $1);
     g_node_append($$, $3);
+  }
+;
+
+unary:
+  TOK_MINUS expression {
+    $$ = g_node_new("neg");
+    g_node_append($$, $2);
   }
 ;
 
@@ -266,12 +304,12 @@ void yyerror(const char *msg)
   fprintf(stderr, "[ERROR] Line %d: %s : ", yylineno, msg);
 }
 
-void produce_locals()
+void emit_locals(int n)
 {
   fprintf(yyout, "\t.locals init (");
-  for (int i = 1; i <= g_hash_table_size(table); i++) {
+  for (int i = 1; i <= n; i++) {
     fprintf(yyout, "int32");
-    if (i < g_hash_table_size(table)) {
+    if (i < n) {
       fprintf(yyout, ", ");
     }
   }
@@ -285,153 +323,72 @@ void begin_code()
   fprintf(yyout, ".method static void Main()\n");
   fprintf(yyout, "{\n");
   fprintf(yyout, "\t.entrypoint\n");
-  fprintf(yyout, "\t.maxstack %d\n", g_hash_table_size(table) + 1);
-  produce_locals();
+  fprintf(yyout, "\t.maxstack %d\n", g_hash_table_size(table) + 1); // +1 for comparison return value
+  emit_locals(g_hash_table_size(table));
 }
 
 void end_code()
 {
-  produce_instr(instr++);
+  emit_instruction();
   fprintf(yyout, "\tret\n");
   fprintf(yyout, "}\n");
 }
 
-void produce_instr(int instr)
+void emit_instruction()
 {
   // Print the instr number in hex like IL_xxxx
-  fprintf(yyout, "\tIL_%04x: ", instr);
+  fprintf(yyout, "\tIL_%04x: ", instr++);
 }
 
-void produce_nop()
+void emit_label(int label)
 {
-  produce_instr(instr++);
+  fprintf(yyout, "LB_%04x:\n", label);
+}
+
+void emit_nop()
+{
+  emit_instruction();
   fprintf(yyout, "\tnop\n");
 }
 
-int produce_code(GNode *node)
+void emit_ret()
+{
+  emit_instruction();
+  fprintf(yyout, "\tret\n");
+}
+
+void emit_code(GNode *node)
 {
   if (node == NULL) {
     printf("Node is NULL\n");
     return;
   }
 
-  printf("Producing code for node %s\n", (char*)node->data);
+  printf("Emitting code for node %s\n", (char *)node->data);
 
   if (strcmp(node->data, "code") == 0) {
-    produce_code(g_node_nth_child(node, 0));
-    produce_code(g_node_nth_child(node, 1));
+    emit_code(g_node_nth_child(node, 0));
+    emit_code(g_node_nth_child(node, 1));
 
-  } else if (strcmp(node->data, "assignement") == 0) {
-    produce_code(g_node_nth_child(node, 1));
-    produce_instr(instr++);
-    fprintf(yyout, "\tstloc %ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data - 1);
+  } else if (strcmp(node->data, "statement") == 0) {
+    emit_statement(g_node_nth_child(node, 0));
+
+  } else {
+    fprintf(stderr, "Unknown node: %s\n", (char *)node->data);
+  }
+}
+
+void emit_statement(GNode *node)
+{
+  printf("Emitting statement for node %s\n", (char *)node->data);
+  if (strcmp(node->data, "assignement") == 0) {
+    emit_assignement(node);
 
   } else if (strcmp(node->data, "print") == 0) {
-    produce_code(g_node_nth_child(node, 0));
-    produce_instr(instr++);
-    fprintf(yyout, "\tcall void class [mscorlib]System.Console::WriteLine(int32)\n");
-
-  } else if (strcmp(node->data, "number") == 0) {
-    produce_instr(instr++);
-    fprintf(yyout, "\tldc.i4 0x%x\n", (long)g_node_nth_child(node, 0)->data);
-
-  } else if (strcmp(node->data, "identifier") == 0) {
-    produce_instr(instr++);
-    fprintf(yyout, "\tldloc %ld\n", (long)g_node_nth_child(node, 0)->data - 1);
-
-  } else if (strcmp(node->data, "add") == 0) {
-    produce_nop();
-
-    produce_code(g_node_nth_child(node, 0));
-    produce_code(g_node_nth_child(node, 1));
-
-    produce_instr(instr++);
-    fprintf(yyout, "\tadd\n");
-
-  } else if (strcmp(node->data, "sub") == 0) {
-    produce_nop();
-
-    produce_code(g_node_nth_child(node, 0));
-    produce_code(g_node_nth_child(node, 1));
-
-    produce_instr(instr++);
-    fprintf(yyout, "\tsub\n");
-
-  } else if (strcmp(node->data, "mul") == 0) {
-    produce_nop();
-
-    produce_code(g_node_nth_child(node, 0));
-    produce_code(g_node_nth_child(node, 1));
-
-    produce_instr(instr++);
-    fprintf(yyout, "\tmul\n");
-
-  } else if (strcmp(node->data, "div") == 0) {
-    produce_nop();
-
-    produce_code(g_node_nth_child(node, 0));
-    produce_code(g_node_nth_child(node, 1));
-
-    produce_instr(instr++);
-    fprintf(yyout, "\tdiv\n");
+    emit_print(node);
 
   } else if (strcmp(node->data, "read") == 0) {
-    produce_instr(instr++);
-    fprintf(yyout, "\tldstr \"%s\"\n", "> ");
-    produce_instr(instr++);
-    fprintf(yyout, "\tcall void class [mscorlib]System.Console::Write(string)\n");
-
-    produce_instr(instr++);
-    fprintf(yyout, "\tcall string class [mscorlib]System.Console::ReadLine()\n");
-    produce_instr(instr++);
-    fprintf(yyout, "\tcall int32 int32::Parse(string)\n");
-    produce_instr(instr++);
-    fprintf(yyout, "\tstloc %ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data - 1);
-
-  } else if (strcmp(node->data, "lt") == 0) {
-    produce_nop();
-
-    produce_code(g_node_nth_child(node, 0));
-    produce_code(g_node_nth_child(node, 1));
-
-    produce_instr(instr++);
-    fprintf(yyout, "\tclt\n");
-
-  } else if (strcmp(node->data, "gt") == 0) {
-    produce_nop();
-
-    produce_code(g_node_nth_child(node, 0));
-    produce_code(g_node_nth_child(node, 1));
-
-    produce_instr(instr);
-    fprintf(yyout, "\tcgt\n");
-
-  } else if (strcmp(node->data, "eq") == 0) {
-    produce_nop();
-
-    produce_code(g_node_nth_child(node, 0));
-    produce_code(g_node_nth_child(node, 1));
-
-    produce_instr(instr++);
-    fprintf(yyout, "\tbeq");
-
-  } else if (strcmp(node->data, "lte") == 0) {
-    produce_nop();
-
-    produce_code(g_node_nth_child(node, 0));
-    produce_code(g_node_nth_child(node, 1));
-
-    produce_instr(instr);
-    fprintf(yyout, "\tble\n");
-
-  } else if (strcmp(node->data, "gte") == 0) {
-    produce_nop();
-
-    produce_code(g_node_nth_child(node, 0));
-    produce_code(g_node_nth_child(node, 1));
-
-    produce_instr(instr);
-    fprintf(yyout, "\tbge\n");
+    emit_read(node);
 
   } else if (strcmp(node->data, "if") == 0) {
     if (g_node_n_children(node) == 2) {
@@ -444,29 +401,58 @@ int produce_code(GNode *node)
   } else {
     fprintf(stderr, "Unknown node: %s\n", (char *)node->data);
   }
-
-  return instr;
 }
 
-void emit_label(int label)
+void emit_assignement(GNode *node)
 {
-  fprintf(yyout, "LB_%04x:\n", label);
+  emit_expression(g_node_nth_child(node, 1));
+
+  emit_instruction();
+  fprintf(yyout, "\tstloc %ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data - 1);
+}
+
+void emit_read(GNode *node)
+{
+  printf("Emitting read for node %s\n", (char *)node->data);
+  printf("\tNode child %s\n", g_node_nth_child(node, 0)->data);
+
+  emit_instruction();
+  fprintf(yyout, "\tldstr \"%s\"\n", "> ");
+  emit_instruction();
+  fprintf(yyout, "\tcall void class [mscorlib]System.Console::Write(string)\n");
+
+  emit_instruction();
+  fprintf(yyout, "\tcall string class [mscorlib]System.Console::ReadLine()\n");
+  emit_instruction();
+  fprintf(yyout, "\tcall int32 int32::Parse(string)\n");
+  emit_instruction();
+  fprintf(yyout, "\tstloc %ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data - 1);
+}
+
+void emit_print(GNode *node)
+{
+  printf("Emitting print for node %s\n", node->data);
+  printf("\tNode child %s\n", g_node_nth_child(node, 0)->data);
+  emit_expression(g_node_nth_child(node, 0));
+
+  emit_instruction();
+  fprintf(yyout, "\tcall void class [mscorlib]System.Console::WriteLine(int32)\n");
 }
 
 void emit_if(GNode *node)
 {
   // The condition
-  produce_code(g_node_nth_child(node, 0));
+  emit_expression(g_node_nth_child(node, 0));
 
   // Label
   int end_label = label++;
 
   // The jump
-  produce_instr(instr++);
+  emit_instruction();
   fprintf(yyout, "\tbrfalse LB_%04x\n", end_label);
 
   // The code
-  produce_code(g_node_nth_child(node, 1));
+  emit_code(g_node_nth_child(node, 1));
 
   // The label
   emit_label(end_label);
@@ -475,31 +461,125 @@ void emit_if(GNode *node)
 void emit_if_else(GNode *node)
 {
   // The condition
-  produce_code(g_node_nth_child(node, 0));
+  emit_expression(g_node_nth_child(node, 0));
 
   // Label
   int end_label = label++;
   int else_label = label++;
 
   // The jump
-  produce_instr(instr++);
+  emit_instruction();
   fprintf(yyout, "\tbrfalse LB_%04x\n", else_label);
 
   // The code
-  produce_code(g_node_nth_child(node, 1));
+  emit_code(g_node_nth_child(node, 1));
 
   // The jump
-  produce_instr(instr++);
+  emit_instruction();
   fprintf(yyout, "\tbr LB_%04x\n", end_label);
 
   // The Else Label
   emit_label(else_label);
 
   // The else
-  produce_code(g_node_nth_child(node, 2));
+  emit_code(g_node_nth_child(node, 2));
 
   // The Label
   emit_label(end_label);
+}
+
+void emit_expression(GNode *node)
+{
+  printf("Emitting expression for node %s\n", (char*)node->data);
+
+  if (strcmp(node->data, "binary") == 0) {
+    emit_binary(node);
+
+  } else if (strcmp(node->data, "unary") == 0) {
+    emit_unary(node);
+
+  } else if (strcmp(node->data, "number") == 0) {
+    emit_number(node);
+
+  } else if (strcmp(node->data, "identifier") == 0) {
+    emit_identifier(node);
+
+  } else {
+    fprintf(stderr, "Unknown node: %s\n", (char *)node->data);
+  }
+}
+
+void emit_binary(GNode *node)
+{
+  printf("Emitting binary for node %s\n", (char*)node->data);
+  // Emit a nop before the binary expression
+  emit_nop();
+
+  // The left
+  emit_expression(g_node_nth_child(node, 0));
+
+  // The right
+  emit_expression(g_node_nth_child(node, 1));
+
+  // The operator
+  if (strcmp(node->data, "add") == 0) {
+    emit_instruction();
+    fprintf(yyout, "\tadd\n");
+
+  } else if (strcmp(node->data, "sub") == 0) {
+    emit_instruction();
+    fprintf(yyout, "\tsub\n");
+
+  } else if (strcmp(node->data, "mul") == 0) {
+    emit_instruction();
+    fprintf(yyout, "\tmul\n");
+
+  } else if (strcmp(node->data, "div") == 0) {
+    emit_instruction();
+    fprintf(yyout, "\tdiv\n");
+
+  } else if (strcmp(node->data, "lt") == 0) {
+    emit_instruction();
+    fprintf(yyout, "\tclt\n");
+
+  } else if (strcmp(node->data, "gt") == 0) {
+    emit_instruction();
+    fprintf(yyout, "\tcgt\n");
+
+  } else if (strcmp(node->data, "eq") == 0) {
+    emit_instruction();
+    fprintf(yyout, "\tceq\n");
+
+  } else if (strcmp(node->data, "lte") == 0) {
+    emit_instruction();
+    fprintf(yyout, "\tclt\n");
+
+  } else if (strcmp(node->data, "gte") == 0) {
+    emit_instruction();
+    fprintf(yyout, "\tcgt\n");
+
+  } else {
+    fprintf(stderr, "Unknown node: %s\n", (char *)node->data);
+  }
+}
+
+void emit_unary(GNode *node)
+{
+
+}
+
+void emit_number(GNode *node)
+{
+  emit_instruction();
+  fprintf(yyout, "\tldc.i4 0x%x\n", (long)g_node_nth_child(node, 0)->data);
+}
+
+void emit_identifier(GNode *node)
+{
+  printf("Emitting identifier for node %s\n", (char*)node->data);
+
+  emit_instruction();
+  fprintf(yyout, "\tldloc %ld\n", (long)g_node_nth_child(node, 0)->data - 1);
 }
 
 int main(int argc, char **argv)
@@ -532,45 +612,4 @@ int main(int argc, char **argv)
 
   // Close the file
   fclose(file);
-}
-
-int finsert (FILE* file, const char *buffer, int line) {
-  char *pos;
-  char *file_buffer;
-  int offset;
-
-  if (file == NULL || buffer == NULL) {
-    return -1;
-  }
-
-  // Allocate memory for the file buffer as the size of the file
-  fseek(file, 0, SEEK_END);
-  file_buffer = malloc(ftell(file));
-  if (file_buffer == NULL) {
-    return -1;
-  }
-
-  pos = file_buffer;
-  for (int i = 1; i < line; i++) {
-    pos = strchr(pos, '\n');
-    if (pos == NULL) {
-      return -1;
-    }
-
-    pos++;
-  }
-
-  offset = strlen(buffer) + strlen(file_buffer) + 1;
-
-  // Move the file buffer to the end of the buffer
-  memmove(pos + strlen(buffer), pos, strlen(pos) + 1);
-  strncpy(pos, buffer, strlen(buffer));
-
-  // Move the file pointer to the beginning of the file
-  fseek(file, 0, SEEK_SET);
-
-  // Write the file buffer to the file
-  fwrite(file_buffer, offset, 1, file);
-
-  return 0;
 }
