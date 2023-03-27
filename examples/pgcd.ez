@@ -1,0 +1,17 @@
+read a
+read b
+
+
+while a*b != 0 do
+    if a>b then
+        a := b - a
+    else 
+        b  := b - a
+    endif
+endwhile
+
+if a == 0 then
+ print a
+else 
+    print b
+endif
