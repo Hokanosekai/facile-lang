@@ -1,7 +1,0 @@
-read a
-read b
-read d
-
-c := a + b
-
-print c + d

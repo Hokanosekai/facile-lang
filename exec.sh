@@ -3,10 +3,8 @@
 rm -f *.exe
 rm -f *.il
 
-./build/facile test.ez
+./build/facile $1
 
-ilasm output.il /exe /output:output.exe
+ilasm output.il /exe /output:z.exe
 
 echo "\nDone.\n"
-
-mono output.exe

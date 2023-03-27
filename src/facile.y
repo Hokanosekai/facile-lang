@@ -12,7 +12,11 @@ int yylex();
 void yyerror(const char *msg);
 
 GHashTable* table;
-void produce_code(GNode* node);
+int produce_code(GNode* node);
+
+void emit_label(int label);
+void emit_if(GNode* node);
+void emit_if_else(GNode* node);
 
 void begin_code();
 void end_code();
@@ -20,6 +24,9 @@ void end_code();
 int maxstack = 0;
 
 char *locals = NULL;
+
+int instr = 0;
+int label = 0;
 
 %}
 
@@ -78,6 +85,7 @@ char *locals = NULL;
 %type               <node> assignement
 %type               <node> print
 %type               <node> read
+%type               <node> if
 %type               <node> statement
 %type               <node> identifier
 %type               <node> number
@@ -104,16 +112,20 @@ code:
     g_node_append($$, $1);
     g_node_append($$, $2);
   } |
+  statement {
+    $$ = g_node_new("code");
+    g_node_append($$, $1);
+  } |
   {
     $$ = g_node_new("");
   }
 
 statement:
-  assignement  {;} |
-  print        {;} |
-  read         {;}
+  assignement  |
+  print        |
+  read         |
+  if           
 ;
-
 
 assignement:
   identifier TOK_ASSIGN expression {
@@ -136,6 +148,21 @@ read:
     g_node_append($$, $2);
   }
 ;
+
+if:
+  TOK_IF expression TOK_THEN code TOK_ENDIF {
+    $$ = g_node_new("if");
+    g_node_append($$, $2);
+    g_node_append($$, $4);
+  } |
+  TOK_IF expression TOK_THEN code TOK_ELSE code TOK_ENDIF {
+    $$ = g_node_new("if");
+    g_node_append($$, $2);
+    g_node_append($$, $4);
+    g_node_append($$, $6);
+  }
+;
+
 
 expression:
   arithmetic                        {;} |
@@ -187,23 +214,16 @@ comparison:
     $$ = g_node_new("lte");
     g_node_append($$, $1);
     g_node_append($$, $3);
-    printf(" clt\n");
-    printf(" ldc.i4.0\n");
-    printf(" ceq\n");
   }  |
   expression TOK_GTE  expression    {
     $$ = g_node_new("gte");
     g_node_append($$, $1);
     g_node_append($$, $3);
-    printf(" cgt\n");
-    printf(" ldc.i4.0\n");
-    printf(" ceq\n");
   }  |
   expression TOK_EQ   expression    {
     $$ = g_node_new("eq");
     g_node_append($$, $1);
     g_node_append($$, $3);
-    printf(" ceq\n");
   }
 ;
 
@@ -250,13 +270,9 @@ void produce_locals()
 {
   fprintf(yyout, "\t.locals init (");
   for (int i = 1; i <= g_hash_table_size(table); i++) {
-    if (i == 0) fprintf(yyout, "\n\t\t");
-
     fprintf(yyout, "int32");
     if (i < g_hash_table_size(table)) {
       fprintf(yyout, ", ");
-    } else {
-      fprintf(yyout, "\n");
     }
   }
   fprintf(yyout, ")\n");
@@ -269,17 +285,30 @@ void begin_code()
   fprintf(yyout, ".method static void Main()\n");
   fprintf(yyout, "{\n");
   fprintf(yyout, "\t.entrypoint\n");
-  fprintf(yyout, "\t.maxstack %d\n", g_hash_table_size(table));
+  fprintf(yyout, "\t.maxstack %d\n", g_hash_table_size(table) + 1);
   produce_locals();
 }
 
 void end_code()
 {
-  fprintf(yyout, "\tret\n");  
+  produce_instr(instr++);
+  fprintf(yyout, "\tret\n");
   fprintf(yyout, "}\n");
 }
 
-void produce_code(GNode *node)
+void produce_instr(int instr)
+{
+  // Print the instr number in hex like IL_xxxx
+  fprintf(yyout, "\tIL_%04x: ", instr);
+}
+
+void produce_nop()
+{
+  produce_instr(instr++);
+  fprintf(yyout, "\tnop\n");
+}
+
+int produce_code(GNode *node)
 {
   if (node == NULL) {
     printf("Node is NULL\n");
@@ -294,74 +323,183 @@ void produce_code(GNode *node)
 
   } else if (strcmp(node->data, "assignement") == 0) {
     produce_code(g_node_nth_child(node, 1));
-    fprintf(yyout, "\tstloc\t%ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data - 1);
-    //TODO : jai besoin de .locals
+    produce_instr(instr++);
+    fprintf(yyout, "\tstloc %ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data - 1);
+
   } else if (strcmp(node->data, "print") == 0) {
     produce_code(g_node_nth_child(node, 0));
+    produce_instr(instr++);
     fprintf(yyout, "\tcall void class [mscorlib]System.Console::WriteLine(int32)\n");
 
   } else if (strcmp(node->data, "number") == 0) {
-    fprintf(yyout, "\tldc.i4\t%ld\n", (long)g_node_nth_child(node, 0)->data);
+    produce_instr(instr++);
+    fprintf(yyout, "\tldc.i4 0x%x\n", (long)g_node_nth_child(node, 0)->data);
 
   } else if (strcmp(node->data, "identifier") == 0) {
-    fprintf(yyout, "\tldloc\t%ld\n", (long)g_node_nth_child(node, 0)->data - 1);
+    produce_instr(instr++);
+    fprintf(yyout, "\tldloc %ld\n", (long)g_node_nth_child(node, 0)->data - 1);
 
   } else if (strcmp(node->data, "add") == 0) {
+    produce_nop();
+
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
+
+    produce_instr(instr++);
     fprintf(yyout, "\tadd\n");
 
   } else if (strcmp(node->data, "sub") == 0) {
+    produce_nop();
+
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
+
+    produce_instr(instr++);
     fprintf(yyout, "\tsub\n");
 
   } else if (strcmp(node->data, "mul") == 0) {
+    produce_nop();
+
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
+
+    produce_instr(instr++);
     fprintf(yyout, "\tmul\n");
 
   } else if (strcmp(node->data, "div") == 0) {
+    produce_nop();
+
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
+
+    produce_instr(instr++);
     fprintf(yyout, "\tdiv\n");
 
   } else if (strcmp(node->data, "read") == 0) {
-    fprintf(yyout, "\tldstr\t\"%s\"\n", "> ");
+    produce_instr(instr++);
+    fprintf(yyout, "\tldstr \"%s\"\n", "> ");
+    produce_instr(instr++);
     fprintf(yyout, "\tcall void class [mscorlib]System.Console::Write(string)\n");
+
+    produce_instr(instr++);
     fprintf(yyout, "\tcall string class [mscorlib]System.Console::ReadLine()\n");
+    produce_instr(instr++);
     fprintf(yyout, "\tcall int32 int32::Parse(string)\n");
-    fprintf(yyout, "\tstloc\t%ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data - 1);
-    // TODO : jai besoin de .locals
+    produce_instr(instr++);
+    fprintf(yyout, "\tstloc %ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data - 1);
 
   } else if (strcmp(node->data, "lt") == 0) {
+    produce_nop();
+
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
+
+    produce_instr(instr++);
     fprintf(yyout, "\tclt\n");
 
   } else if (strcmp(node->data, "gt") == 0) {
+    produce_nop();
+
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
+
+    produce_instr(instr);
     fprintf(yyout, "\tcgt\n");
 
   } else if (strcmp(node->data, "eq") == 0) {
+    produce_nop();
+
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
-    fprintf(yyout, "\tceq\n");
+
+    produce_instr(instr++);
+    fprintf(yyout, "\tbeq");
 
   } else if (strcmp(node->data, "lte") == 0) {
+    produce_nop();
+
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
-    fprintf(yyout, "\tclt\n");
-    fprintf(yyout, "\txor\tbool\ttrue\t\t// bool::op_Inequality(bool, bool)\n");
-  
+
+    produce_instr(instr);
+    fprintf(yyout, "\tble\n");
+
   } else if (strcmp(node->data, "gte") == 0) {
+    produce_nop();
+
     produce_code(g_node_nth_child(node, 0));
     produce_code(g_node_nth_child(node, 1));
-    fprintf(yyout, "\tcgt\n");
-    fprintf(yyout, "\txor\tbool\ttrue\t\t// bool::op_Inequality(bool, bool)\n");
-  
+
+    produce_instr(instr);
+    fprintf(yyout, "\tbge\n");
+
+  } else if (strcmp(node->data, "if") == 0) {
+    if (g_node_n_children(node) == 2) {
+        emit_if(node);
+    } else if (g_node_n_children(node) == 3) {
+        emit_if_else(node);
+    } else {
+        fprintf(stderr, "Unknown node: %s\n", (char *)node->data);
+    }
+  } else {
+    fprintf(stderr, "Unknown node: %s\n", (char *)node->data);
   }
+
+  return instr;
+}
+
+void emit_label(int label)
+{
+  fprintf(yyout, "LB_%04x:\n", label);
+}
+
+void emit_if(GNode *node)
+{
+  // The condition
+  produce_code(g_node_nth_child(node, 0));
+
+  // Label
+  int end_label = label++;
+
+  // The jump
+  produce_instr(instr++);
+  fprintf(yyout, "\tbrfalse LB_%04x\n", end_label);
+
+  // The code
+  produce_code(g_node_nth_child(node, 1));
+
+  // The label
+  emit_label(end_label);
+}
+
+void emit_if_else(GNode *node)
+{
+  // The condition
+  produce_code(g_node_nth_child(node, 0));
+
+  // Label
+  int end_label = label++;
+  int else_label = label++;
+
+  // The jump
+  produce_instr(instr++);
+  fprintf(yyout, "\tbrfalse LB_%04x\n", else_label);
+
+  // The code
+  produce_code(g_node_nth_child(node, 1));
+
+  // The jump
+  produce_instr(instr++);
+  fprintf(yyout, "\tbr LB_%04x\n", end_label);
+
+  // The Else Label
+  emit_label(else_label);
+
+  // The else
+  produce_code(g_node_nth_child(node, 2));
+
+  // The Label
+  emit_label(end_label);
 }
 
 int main(int argc, char **argv)

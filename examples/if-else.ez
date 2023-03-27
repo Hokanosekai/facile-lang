@@ -1,0 +1,6 @@
+read a
+if a < 10 then
+    print a
+else
+    print 10
+endif
