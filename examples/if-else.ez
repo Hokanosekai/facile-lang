@@ -1,6 +1,10 @@
 read a
 if a < 10 then
-    print a
+    if a < 5 then
+        print a
+    else
+        print a + 1
+    endif
 else
-    print 10
+    print a + 2
 endif
