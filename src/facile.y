@@ -11,6 +11,8 @@ extern FILE *yyout;
 int yylex();
 void yyerror(const char *msg);
 
+int count_nodes(GNode *node, char *data);
+
 GHashTable* table;
 void emit_code(GNode* node);
 
@@ -200,16 +202,49 @@ read:
 ;
 
 if:
-  TOK_IF expression TOK_THEN code {
+  TOK_IF expression TOK_THEN code elif else TOK_ENDIF {
     $$ = g_node_new("if");
+    g_node_append($$, $2);
+    g_node_append($$, $4);
+    g_node_append($$, $5);
+    g_node_append($$, $6);
+  } |
+  TOK_IF expression TOK_THEN code elif TOK_ENDIF {
+    $$ = g_node_new("if");
+    g_node_append($$, $2);
+    g_node_append($$, $4);
+    g_node_append($$, $5);
+  } |
+  TOK_IF expression TOK_THEN code else TOK_ENDIF {
+    $$ = g_node_new("if");
+    g_node_append($$, $2);
+    g_node_append($$, $4);
+    g_node_append($$, $5);
+  } |
+  TOK_IF expression TOK_THEN code TOK_ENDIF {
+    $$ = g_node_new("if");
+    g_node_append($$, $2);
+    g_node_append($$, $4);
+  }
+;
+
+elif:
+  TOK_ELIF expression TOK_THEN code elif {
+    $$ = g_node_new("elif");
     g_node_append($$, $2);
     g_node_append($$, $4);
   } |
-  TOK_IF expression TOK_THEN code TOK_ELSE code {
-    $$ = g_node_new("if");
+  TOK_ELIF expression TOK_THEN code {
+    $$ = g_node_new("elif");
     g_node_append($$, $2);
     g_node_append($$, $4);
-    g_node_append($$, $6);
+  }
+;
+
+else:
+  TOK_ELSE code TOK_ENDIF {
+    $$ = g_node_new("else");
+    g_node_append($$, $2);
   }
 ;
 
@@ -427,13 +462,7 @@ void emit_statement(GNode *node)
     emit_read(node);
 
   } else if (strcmp(node->data, "if") == 0) {
-    if (g_node_n_children(node) == 2) {
-        emit_if(node);
-    } else if (g_node_n_children(node) == 3) {
-        emit_if_else(node);
-    } else {
-        fprintf(stderr, "Unknown node: %s\n", (char *)node->data);
-    }
+    emit_if(node);
 
   } else if (strcmp(node->data, "while") == 0) {
     emit_while(node);
@@ -483,16 +512,70 @@ void emit_if(GNode *node)
 
   // Label
   int end_label = label++;
+  int else_label;
+  int *elif_labels = NULL;
+  int n = 0;
 
-  // The jump
-  emit_instruction();
-  fprintf(yyout, "\tbrfalse LB_%04x\n", end_label);
+  // If there is an else increase the label
+  if (g_node_nth_child(node, 2) != NULL && strcmp(g_node_nth_child(node, 2)->data, "else") == 0) {
+    else_label = label++;
+  }
+
+  // If there is an elif we count them and allocate the labels
+  if (g_node_nth_child(node, 2) != NULL && strcmp(g_node_nth_child(node, 2)->data, "elif") == 0) {
+    n = count_nodes(g_node_nth_child(node, 2), "elif");
+    elif_labels = malloc(n * sizeof(int));
+    for (int i = 0; i < n; i++) {
+      elif_labels[i] = label++;
+    }
+  }
+
+  // Branch the first elif block if the condition is false
+  for (int i = 0; i < n; i++) {
+    emit_instruction();
+    fprintf(yyout, "\tbrfalse LB_%04x\n", elif_labels[i]);
+  }
 
   // The code
   emit_code(g_node_nth_child(node, 1));
 
-  // The label
+  // Branch to the end of the if
+  emit_instruction();
+  fprintf(yyout, "\tbr LB_%04x\n", end_label);
+
+  // The elif blocks
+  for (int i = 0; i < n; i++) {
+    emit_label(elif_labels[i]);
+    emit_expression(g_node_nth_child(g_node_nth_child(node, 2), i * 2));
+    
+    // Branch the next elif block if the condition is false
+    for (int j = i + 1; j < n; j++) {
+      emit_instruction();
+      fprintf(yyout, "\tbrfalse LB_%04x\n", elif_labels[j]);
+    }
+
+    // The code
+    emit_code(g_node_nth_child(g_node_nth_child(node, 2), i * 2 + 1));
+
+    // Branch to the end of the if
+    emit_instruction();
+    fprintf(yyout, "\tbr LB_%04x\n", end_label);
+
+  }
+
+  // The else block
+  if (g_node_nth_child(node, 2) != NULL && strcmp(g_node_nth_child(node, 2)->data, "else") == 0) {
+    emit_label(else_label);
+    emit_code(g_node_nth_child(node, 2));
+  }
+
+  // The Label
   emit_label(end_label);
+
+  // Free the labels
+  if (elif_labels != NULL) {
+    free(elif_labels);
+  }
 }
 
 void emit_if_else(GNode *node)
@@ -758,4 +841,23 @@ int main(int argc, char **argv)
 
   // Close the file
   fclose(file);
+}
+
+int count_nodes(GNode *node, char *data)
+{
+  int count = 0;
+
+  if (strcmp(node->data, data) == 0) {
+    count++;
+  }
+
+  if (node->children != NULL) {
+    GNode *child = node->children;
+    while (child != NULL) {
+      count += count_nodes(child, data);
+      child = child->next;
+    }
+  }
+
+  return count;
 }
