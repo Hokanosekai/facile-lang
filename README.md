@@ -13,9 +13,6 @@ Projet de compilation : FLEX/BISON
 
 </div>
 
-
-
-
 # Introduction
 
 Ce projet à été réalisé dans le cadre du cours de compilation. Il a pour but de nous faire coder un langage de programmation haut niveau basic.

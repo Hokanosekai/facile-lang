@@ -23,7 +23,7 @@ void end_code();
 "if"                        {return TOK_IF;}
 "then"                      {return TOK_THEN;}
 "else"                      {return TOK_ELSE;}
-"elseif"                    {return TOK_ELSEIF;}
+"elif"                      {return TOK_ELIF;}
 "endif"                     {return TOK_ENDIF;}
 
 "not"                       {return TOK_NOT;}
@@ -44,28 +44,31 @@ void end_code();
 "true"                      {return TOK_TRUE;}
 "false"                     {return TOK_FALSE;}
 
-"=="                      {return TOK_EQ;}
-">"                       {return TOK_GT;}
-"<"                       {return TOK_LT;}
-">="                      {return TOK_GTE;}
-"<="                      {return TOK_LTE;}
+"=="                        {return TOK_EQ;}
+">"                         {return TOK_GT;}
+"<"                         {return TOK_LT;}
+">="                        {return TOK_GTE;}
+"<="                        {return TOK_LTE;}
+"!="                        {return TOK_NEQ;}
 
-"+"                       {return TOK_PLUS;}
-"-"                       {return TOK_MINUS;}
-"*"                       {return TOK_MULT;}
-"/"                       {return TOK_DIV;}
-"%"                       {return TOK_MOD;}
+"+"                         {return TOK_PLUS;}
+"-"                         {return TOK_MINUS;}
+"*"                         {return TOK_MULT;}
+"/"                         {return TOK_DIV;}
+"%"                         {return TOK_MOD;}
 
-":="                      {return TOK_ASSIGN;}
+":="                        {return TOK_ASSIGN;}
 
-"("                       {return TOK_LPAREN;}
-")"                       {return TOK_RPAREN;}
+"("                         {return TOK_LPAREN;}
+")"                         {return TOK_RPAREN;}
 
-[a-zA-Z][a-zA-Z0-9_]*     {yylval.id = yytext;return IDENTIFIER;}
-[0-9]+                    {yylval.num = atoi(yytext);return NUMBER;}
+[a-zA-Z][a-zA-Z0-9_]*       {yylval.id = yytext;return IDENTIFIER;}
+[0-9]+                      {yylval.num = atoi(yytext);return NUMBER;}
 
-[ \t\n]                   ;
-.                         {ECHO; yyerror("Unexpected character");}
+"//".*                      {ECHO;}
+
+[ \t\n]                     ;
+.                           {ECHO; yyerror("Unexpected character");}
 
 %%
 

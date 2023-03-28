@@ -1,6 +1,7 @@
 read a
 read b
 
+<<<<<<< HEAD
 
 while a*b != 0 do
     if a>b then
@@ -15,3 +16,14 @@ if a == 0 then
 else 
     print b
 endif
+=======
+// test
+
+while b > 0 do
+    c := a
+    a := b
+    b := c % b
+endwhile
+
+print a + b
+>>>>>>> 2ee8bbf (Negative number + While + break + continue)
