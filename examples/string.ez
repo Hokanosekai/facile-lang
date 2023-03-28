@@ -1,0 +1,9 @@
+print "Hello world !!!\n"
+
+read "1 + 1 ? " a
+
+if a == 2 then
+  print "Correct !\n"
+else
+  print "Wrong !\n"
+endif

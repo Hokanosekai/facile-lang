@@ -24,6 +24,7 @@ void emit_instruction();
 void emit_ret();
 void emit_nop();
 
+// Statements
 void emit_statement(GNode* node);
 void emit_assignement(GNode* node);
 void emit_print(GNode* node);
@@ -33,11 +34,15 @@ void emit_while(GNode* node);
 void emit_continue();
 void emit_break();
 
+// Expressions
 void emit_expression(GNode* node);
 void emit_binary(GNode* node);
 void emit_unary(GNode* node);
+
+// Literals
 void emit_identifier(GNode* node);
 void emit_number(GNode* node);
+void emit_string(GNode* node);
 
 void begin_code();
 void end_code();
@@ -59,6 +64,7 @@ char *output_name;
 %union {
   gchar   *id;
   gulong  num;
+  gchar   *str;
   GNode   *node;
 }
 
@@ -87,6 +93,7 @@ char *output_name;
 
 %token<id>          IDENTIFIER
 %token<num>         NUMBER
+%token<str>         STRING
 
 %left               TOK_PLUS           
 %left               TOK_MINUS          
@@ -119,6 +126,7 @@ char *output_name;
 %type               <node> statement
 %type               <node> identifier
 %type               <node> number
+%type               <node> string
 %type               <node> binary
 %type               <node> unary
 
@@ -191,6 +199,15 @@ print:
   TOK_PRINT expression {
     $$ = g_node_new("print");
     g_node_append($$, $2);
+  } |
+  TOK_PRINT string expression {
+    $$ = g_node_new("print");
+    g_node_append($$, $2);
+    g_node_append($$, $3);
+  } |
+  TOK_PRINT string {
+    $$ = g_node_new("print");
+    g_node_append($$, $2);
   }
 ;
 
@@ -198,6 +215,11 @@ read:
   TOK_READ identifier {
     $$ = g_node_new("read");
     g_node_append($$, $2);
+  } |
+  TOK_READ string identifier {
+    $$ = g_node_new("read");
+    g_node_append($$, $2);
+    g_node_append($$, $3);
   }
 ;
 
@@ -350,7 +372,6 @@ identifier:
     }
 
     g_node_append_data($$, (gpointer) val);
-    printf("\n");
   }
 ;
 
@@ -360,6 +381,12 @@ number:
     g_node_append_data($$, (gpointer)$1);
   }
 ;
+
+string:
+  STRING      {
+    $$ = g_node_new("string");
+    g_node_append($$, g_node_new($1));
+  }
 
 %%
 
@@ -479,25 +506,60 @@ void emit_assignement(GNode *node)
 
 void emit_read(GNode *node)
 {
-  emit_instruction();
-  fprintf(yyout, "\tldstr \"%s\"\n", "> ");
-  emit_instruction();
-  fprintf(yyout, "\tcall void class [mscorlib]System.Console::Write(string)\n");
+  GNode *string = g_node_n_children(node) == 2
+    ? g_node_nth_child(node, 0)
+    : NULL;
+
+  GNode *identifier = g_node_n_children(node) == 2
+    ? g_node_nth_child(node, 1)
+    : g_node_nth_child(node, 0);
+
+  emit_nop();
+
+  if (string != NULL) {
+    emit_string(string);
+    emit_instruction();
+    fprintf(yyout, "\tcall void class [mscorlib]System.Console::Write(string)\n");
+  } else {
+    emit_instruction();
+    fprintf(yyout, "\tldstr \"%s\"\n", "> ");
+    emit_instruction();
+    fprintf(yyout, "\tcall void class [mscorlib]System.Console::Write(string)\n");
+  }
 
   emit_instruction();
   fprintf(yyout, "\tcall string class [mscorlib]System.Console::ReadLine()\n");
   emit_instruction();
   fprintf(yyout, "\tcall int32 int32::Parse(string)\n");
   emit_instruction();
-  fprintf(yyout, "\tstloc %ld\n", (long)g_node_nth_child(g_node_nth_child(node, 0), 0)->data - 1);
+  fprintf(yyout, "\tstloc %ld\n", (long)g_node_nth_child(identifier, 0)->data - 1);
 }
 
 void emit_print(GNode *node)
 {
-  emit_expression(g_node_nth_child(node, 0));
+  GNode *expression = g_node_n_children(node) == 2
+    ? g_node_nth_child(node, 1)
+    : strcmp(g_node_nth_child(node, 0)->data, "string") == 0
+      ? NULL
+      : g_node_nth_child(node, 0);
 
-  emit_instruction();
-  fprintf(yyout, "\tcall void class [mscorlib]System.Console::WriteLine(int32)\n");
+  GNode *string = g_node_n_children(node) == 2
+    ? g_node_nth_child(node, 0)
+    : strcmp(g_node_nth_child(node, 0)->data, "string") == 0
+      ? g_node_nth_child(node, 0)
+      : NULL;
+
+  if (string != NULL) {
+    emit_string(string);
+    emit_instruction();
+    fprintf(yyout, "\tcall void class [mscorlib]System.Console::Write(string)\n");
+  }
+
+  if (expression != NULL) {
+    emit_expression(expression);
+    emit_instruction();
+    fprintf(yyout, "\tcall void class [mscorlib]System.Console::WriteLine(int32)\n");
+  }
 }
 
 void emit_if(GNode *node)
@@ -789,6 +851,12 @@ void emit_identifier(GNode *node)
   fprintf(yyout, "\tldloc %ld\n", (long)g_node_nth_child(node, 0)->data - 1);
 }
 
+void emit_string(GNode *node)
+{
+  emit_instruction();
+  fprintf(yyout, "\tldstr %s\n", (char *)g_node_nth_child(node, 0)->data);
+}
+
 int main(int argc, char **argv)
 {
   if (argc != 2) {
@@ -859,4 +927,4 @@ int count_nodes(GNode *node, char *data)
   }
 
   return count;
-}
+} 
