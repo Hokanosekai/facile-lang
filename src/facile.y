@@ -29,14 +29,13 @@ void emit_assignement(GNode* node);
 void emit_print(GNode* node);
 void emit_read(GNode* node);
 void emit_if(GNode* node);
-void emit_if_else(GNode* node);
 void emit_while(GNode* node);
 void emit_continue();
 void emit_break();
 
 void emit_expression(GNode* node);
-void emit_binary_expression(GNode* node);
-void emit_unary_expression(GNode* node);
+void emit_binary(GNode* node);
+void emit_unary(GNode* node);
 void emit_identifier(GNode* node);
 void emit_number(GNode* node);
 
@@ -114,6 +113,8 @@ char *output_name;
 %type               <node> print
 %type               <node> read
 %type               <node> if
+%type               <node> elif
+%type               <node> else
 %type               <node> while
 %type               <node> statement
 %type               <node> identifier
@@ -128,7 +129,6 @@ char *output_name;
 
 
 program: code {
-  printf("Program\n");
   begin_code();
   emit_code($1);
   end_code();
@@ -163,7 +163,7 @@ statement:
     $$ = g_node_new("statement");
     g_node_append($$, $1);
   } |
-  if TOK_ENDIF           {
+  if           {
     $$ = g_node_new("statement");
     g_node_append($$, $1);
   } |
@@ -233,6 +233,7 @@ elif:
     $$ = g_node_new("elif");
     g_node_append($$, $2);
     g_node_append($$, $4);
+    g_node_append($$, $5);
   } |
   TOK_ELIF expression TOK_THEN code {
     $$ = g_node_new("elif");
@@ -242,7 +243,7 @@ elif:
 ;
 
 else:
-  TOK_ELSE code TOK_ENDIF {
+  TOK_ELSE code {
     $$ = g_node_new("else");
     g_node_append($$, $2);
   }
@@ -337,20 +338,15 @@ identifier:
   IDENTIFIER  {
     $$ = g_node_new("identifier");
     if (table == NULL) {
-      printf("Creating symbol hash table\n");
       table = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, NULL);
     }
-    printf("Checking symbol %s in hash table\n", $1);
 
     gulong val = (gulong) g_hash_table_lookup(table, strdup($1));
-    printf("Symbol %s has value %d\n", $1, val);
+    printf("Symbol %s has value %ld\n", $1, val);
 
     if (!val) {
       val = g_hash_table_size(table) + 1;
       g_hash_table_insert(table, strdup($1), (gpointer) val);
-      printf("Adding symbol %s to hash table at %d\n", $1, val);
-    } else {
-      printf("Symbol %s already in hash table at %d\n", $1, val);
     }
 
     g_node_append_data($$, (gpointer) val);
@@ -428,7 +424,6 @@ void emit_ret()
 void emit_code(GNode *node)
 {
   if (node == NULL) {
-    printf("Node is NULL\n");
     return;
   }
 
@@ -507,8 +502,36 @@ void emit_print(GNode *node)
 
 void emit_if(GNode *node)
 {
+  GNode *condition = g_node_nth_child(node, 0);
+  GNode *code = g_node_nth_child(node, 1);
+  GNode *else_node = g_node_n_children(node) == 4
+    ? g_node_nth_child(node, 3)
+    : g_node_n_children(node) == 3 && strcmp(g_node_nth_child(node, 2)->data, "else") == 0
+      ? g_node_nth_child(node, 2)
+      : NULL;
+
+  printf("There is %d children\n", g_node_n_children(node));
+  
+  GNode *elif_node = g_node_n_children(node) == 4
+    ? g_node_nth_child(node, 2)
+    : g_node_n_children(node) == 3 && strcmp(g_node_nth_child(node, 2)->data, "elif") == 0
+      ? g_node_nth_child(node, 2)
+      : NULL;
+
+  if (elif_node == NULL) {
+    printf("There is no elif\n");
+  } else {
+    printf("There is an elif\n");
+  }
+
+  if (else_node == NULL) {
+    printf("There is no else\n");
+  } else {
+    printf("There is an else\n");
+  }
+
   // The condition
-  emit_expression(g_node_nth_child(node, 0));
+  emit_expression(condition);
 
   // Label
   int end_label = label++;
@@ -517,27 +540,32 @@ void emit_if(GNode *node)
   int n = 0;
 
   // If there is an else increase the label
-  if (g_node_nth_child(node, 2) != NULL && strcmp(g_node_nth_child(node, 2)->data, "else") == 0) {
+  if (else_node != NULL) {
     else_label = label++;
   }
 
   // If there is an elif we count them and allocate the labels
-  if (g_node_nth_child(node, 2) != NULL && strcmp(g_node_nth_child(node, 2)->data, "elif") == 0) {
-    n = count_nodes(g_node_nth_child(node, 2), "elif");
+  if (elif_node != NULL) {
+    printf("Elif node: %s\n", (char *)elif_node->data);
+    n = count_nodes(elif_node, "elif");
+    printf("There are %d elifs\n", n);
     elif_labels = malloc(n * sizeof(int));
     for (int i = 0; i < n; i++) {
       elif_labels[i] = label++;
     }
   }
 
-  // Branch the first elif block if the condition is false
-  for (int i = 0; i < n; i++) {
-    emit_instruction();
-    fprintf(yyout, "\tbrfalse LB_%04x\n", elif_labels[i]);
-  }
+  int next_label = else_node != NULL
+    ? elif_node != NULL
+      ? elif_labels[0]
+      : else_label
+    : end_label;
+
+  emit_instruction();
+  fprintf(yyout, "\tbrfalse LB_%04x\n", next_label);
 
   // The code
-  emit_code(g_node_nth_child(node, 1));
+  emit_code(code);
 
   // Branch to the end of the if
   emit_instruction();
@@ -546,27 +574,37 @@ void emit_if(GNode *node)
   // The elif blocks
   for (int i = 0; i < n; i++) {
     emit_label(elif_labels[i]);
-    emit_expression(g_node_nth_child(g_node_nth_child(node, 2), i * 2));
-    
-    // Branch the next elif block if the condition is false
-    for (int j = i + 1; j < n; j++) {
-      emit_instruction();
-      fprintf(yyout, "\tbrfalse LB_%04x\n", elif_labels[j]);
-    }
+    emit_expression(g_node_nth_child(elif_node, 0));
 
+    next_label = i + 1 < n
+      ? elif_labels[i + 1]
+      : else_node != NULL
+        ? else_label
+        : end_label;
+
+    // Branch the next elif block if the condition is false
+    emit_instruction();
+    fprintf(yyout, "\tbrfalse LB_%04x\n", next_label);
     // The code
-    emit_code(g_node_nth_child(g_node_nth_child(node, 2), i * 2 + 1));
+    emit_code(g_node_nth_child(elif_node, 1));
 
     // Branch to the end of the if
     emit_instruction();
     fprintf(yyout, "\tbr LB_%04x\n", end_label);
 
+    // If the elif_node has a next elif_node
+    if (g_node_n_children(elif_node) == 3) {
+      elif_node = g_node_nth_child(elif_node, 2);
+    }
+    /*if (g_node_nth_child(elif_node, 2) != NULL && strcmp(g_node_nth_child(elif_node, 2)->data, "elif") == 0) {
+      elif_node = g_node_nth_child(elif_node, 2);
+    }*/
   }
 
   // The else block
-  if (g_node_nth_child(node, 2) != NULL && strcmp(g_node_nth_child(node, 2)->data, "else") == 0) {
+  if (else_node != NULL) {
     emit_label(else_label);
-    emit_code(g_node_nth_child(node, 2));
+    emit_code(g_node_nth_child(else_node, 0));
   }
 
   // The Label
@@ -576,36 +614,6 @@ void emit_if(GNode *node)
   if (elif_labels != NULL) {
     free(elif_labels);
   }
-}
-
-void emit_if_else(GNode *node)
-{
-  // The condition
-  emit_expression(g_node_nth_child(node, 0));
-
-  // Label
-  int end_label = label++;
-  int else_label = label++;
-
-  // The jump
-  emit_instruction();
-  fprintf(yyout, "\tbrfalse LB_%04x\n", else_label);
-
-  // The code
-  emit_code(g_node_nth_child(node, 1));
-
-  // The jump
-  emit_instruction();
-  fprintf(yyout, "\tbr LB_%04x\n", end_label);
-
-  // The Else Label
-  emit_label(else_label);
-
-  // The else
-  emit_code(g_node_nth_child(node, 2));
-
-  // The Label
-  emit_label(end_label);
 }
 
 void emit_while(GNode *node)
@@ -692,7 +700,6 @@ void emit_expression(GNode *node)
 
 void emit_binary(GNode *node)
 {
-  printf("Emitting binary for node %s\n", (char*)node->data);
   // Emit a nop before the binary expression
   emit_nop();
 
@@ -757,7 +764,6 @@ void emit_binary(GNode *node)
 
 void emit_unary(GNode *node)
 {
-  printf("Emitting unary for node %s\n", (char*)node->data);
   // Emit a nop before the unary expression
   emit_nop();
 
@@ -774,13 +780,11 @@ void emit_unary(GNode *node)
 void emit_number(GNode *node)
 {
   emit_instruction();
-  fprintf(yyout, "\tldc.i4 %d\n", (long)g_node_nth_child(node, 0)->data);
+  fprintf(yyout, "\tldc.i4 %ld\n", (long)g_node_nth_child(node, 0)->data);
 }
 
 void emit_identifier(GNode *node)
 {
-  printf("Emitting identifier for node %s\n", (char*)node->data);
-
   emit_instruction();
   fprintf(yyout, "\tldloc %ld\n", (long)g_node_nth_child(node, 0)->data - 1);
 }
@@ -849,13 +853,8 @@ int count_nodes(GNode *node, char *data)
 
   if (strcmp(node->data, data) == 0) {
     count++;
-  }
-
-  if (node->children != NULL) {
-    GNode *child = node->children;
-    while (child != NULL) {
-      count += count_nodes(child, data);
-      child = child->next;
+    if (g_node_n_children(node) == 3) {
+      count += count_nodes(g_node_nth_child(node, 2), data);
     }
   }
 
