@@ -29,14 +29,13 @@ void emit_assignement(GNode* node);
 void emit_print(GNode* node);
 void emit_read(GNode* node);
 void emit_if(GNode* node);
-void emit_if_else(GNode* node);
 void emit_while(GNode* node);
 void emit_continue();
 void emit_break();
 
 void emit_expression(GNode* node);
-void emit_binary_expression(GNode* node);
-void emit_unary_expression(GNode* node);
+void emit_binary(GNode* node);
+void emit_unary(GNode* node);
 void emit_identifier(GNode* node);
 void emit_number(GNode* node);
 
@@ -343,7 +342,7 @@ identifier:
     }
 
     gulong val = (gulong) g_hash_table_lookup(table, strdup($1));
-    printf("Symbol %s has value %d\n", $1, val);
+    printf("Symbol %s has value %ld\n", $1, val);
 
     if (!val) {
       val = g_hash_table_size(table) + 1;
@@ -617,36 +616,6 @@ void emit_if(GNode *node)
   }
 }
 
-void emit_if_else(GNode *node)
-{
-  // The condition
-  emit_expression(g_node_nth_child(node, 0));
-
-  // Label
-  int end_label = label++;
-  int else_label = label++;
-
-  // The jump
-  emit_instruction();
-  fprintf(yyout, "\tbrfalse LB_%04x\n", else_label);
-
-  // The code
-  emit_code(g_node_nth_child(node, 1));
-
-  // The jump
-  emit_instruction();
-  fprintf(yyout, "\tbr LB_%04x\n", end_label);
-
-  // The Else Label
-  emit_label(else_label);
-
-  // The else
-  emit_code(g_node_nth_child(node, 2));
-
-  // The Label
-  emit_label(end_label);
-}
-
 void emit_while(GNode *node)
 {
   // Scope
@@ -811,7 +780,7 @@ void emit_unary(GNode *node)
 void emit_number(GNode *node)
 {
   emit_instruction();
-  fprintf(yyout, "\tldc.i4 %d\n", (long)g_node_nth_child(node, 0)->data);
+  fprintf(yyout, "\tldc.i4 %ld\n", (long)g_node_nth_child(node, 0)->data);
 }
 
 void emit_identifier(GNode *node)
@@ -884,10 +853,7 @@ int count_nodes(GNode *node, char *data)
 
   if (strcmp(node->data, data) == 0) {
     count++;
-    printf("Found %d for %s\n", g_node_n_children(node), data);
     if (g_node_n_children(node) == 3) {
-      printf("Found next element for %s", data);
-      printf("\tElement: %s\n", g_node_nth_child(node, 2)->data);
       count += count_nodes(g_node_nth_child(node, 2), data);
     }
   }
