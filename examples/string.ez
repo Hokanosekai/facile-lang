@@ -1,0 +1,10 @@
+print "Hello world !!!\n"
+
+read "1 + 1 ? " a
+
+while a != 2 do
+  print "Wrong !\n"
+  read "1 + 1 ? " a
+endwhile
+
+print "Correct !\n"

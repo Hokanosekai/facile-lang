@@ -65,6 +65,8 @@ void end_code();
 [a-zA-Z][a-zA-Z0-9_]*       {yylval.id = yytext;return IDENTIFIER;}
 [0-9]+                      {yylval.num = atoi(yytext);return NUMBER;}
 
+\".*\"                      {yylval.str = strdup(yytext);return STRING;}
+
 "//".*                      {ECHO;}
 
 [ \t\n]                     ;
