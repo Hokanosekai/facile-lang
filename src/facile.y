@@ -284,6 +284,10 @@ expression:
     $$ = g_node_new("binary");
     g_node_append($$, $1);
   } |
+  unary                             {
+    $$ = g_node_new("unary");
+    g_node_append($$, $1);
+  } |
   identifier                        {;} |
   number                            {;} |
   TOK_LPAREN expression TOK_RPAREN  {
@@ -344,6 +348,16 @@ binary:
   }  |
   expression TOK_NEQ  expression    {
     $$ = g_node_new("neq");
+    g_node_append($$, $1);
+    g_node_append($$, $3);
+  } |
+  expression TOK_AND  expression    {
+    $$ = g_node_new("and");
+    g_node_append($$, $1);
+    g_node_append($$, $3);
+  } |
+  expression TOK_OR   expression    {
+    $$ = g_node_new("or");
     g_node_append($$, $1);
     g_node_append($$, $3);
   }
@@ -812,13 +826,22 @@ void emit_binary(GNode *node)
     emit_instruction();
     fprintf(yyout, "\tcgt\n");
 
+  } else if (strcmp(node->data, "and") == 0) {
+    emit_instruction();
+    fprintf(yyout, "\tand\n");
+
+  } else if (strcmp(node->data, "or") == 0) {
+    emit_instruction();
+    fprintf(yyout, "\tor\n");
+
   // neq => !=
   } else if (strcmp(node->data, "neq") == 0) {
     emit_instruction();
     fprintf(yyout, "\tceq\n");
     emit_instruction();
-    fprintf(yyout, "\tnot\n");
-
+    fprintf(yyout, "\tldc.i4.0\n");
+    emit_instruction();
+    fprintf(yyout, "\tceq\n");
   } else {
     fprintf(stderr, "Unknown node: %s\n", (char *)node->data);
   }
