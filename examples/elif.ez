@@ -1,0 +1,10 @@
+read a
+if a < 10 then
+    print a + 1
+elif a < 20 then
+    print a + 2
+elif a < 30 then
+    print a + 3
+else
+    print a + 4
+endif

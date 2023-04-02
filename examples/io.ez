@@ -1,2 +1,11 @@
+// Default ask format is "> "
 read a
 print a
+
+// You can pass a string before the variable declaration
+read "Enter a number: " a
+print a
+
+// You can also pass a string before the expression to print
+read a
+print "You entered: " a
