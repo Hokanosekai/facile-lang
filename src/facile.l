@@ -37,6 +37,11 @@ void end_code();
 "do"                        {return TOK_DO;}
 "endwhile"                  {return TOK_ENDWHILE;}
 
+"for"                       {return TOK_FOR;}
+"to"                        {return TOK_TO;}
+"step"                      {return TOK_STEP;}
+"endfor"                    {return TOK_ENDFOR;}
+
 "continue"                  {return TOK_CONTINUE;}
 "break"                     {return TOK_BREAK;}
 "end"                       {return TOK_END;}
@@ -44,7 +49,7 @@ void end_code();
 "true"                      {return TOK_TRUE;}
 "false"                     {return TOK_FALSE;}
 
-"=="                        {return TOK_EQ;}
+"=="                        {return TOK_EQEQ;}
 ">"                         {return TOK_GT;}
 "<"                         {return TOK_LT;}
 ">="                        {return TOK_GTE;}
