@@ -55,3 +55,6 @@ build/*
 
 *.il
 *.exe
+
+# Old readme 
+README-exemple.md

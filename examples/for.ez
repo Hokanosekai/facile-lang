@@ -1,0 +1,5 @@
+read a
+
+for i = 0 to a do
+  print i
+endfor

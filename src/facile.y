@@ -33,6 +33,7 @@ void emit_if(GNode* node);
 void emit_while(GNode* node);
 void emit_continue();
 void emit_break();
+void emit_for(GNode* node);
 
 // Expressions
 void emit_expression(GNode* node);
@@ -52,10 +53,9 @@ int maxstack = 0;
 int instr = 0;
 int label = 0;
 
-int while_scope = 0;
-int current_while = 0;
-int *while_labels = NULL;
-
+int global_scope = 0;
+int current_scope = 0;
+int *global_labels = NULL;
 
 char *output_name;
 
@@ -68,51 +68,59 @@ char *output_name;
   GNode   *node;
 }
 
-%token              TOK_IF             
-%token              TOK_THEN           
-%token              TOK_ELSE           
-%token              TOK_ELIF         
-%token              TOK_ENDIF          
+%token              TOK_IF
+%token              TOK_THEN
+%token              TOK_ELSE
+%token              TOK_ELIF
+%token              TOK_ENDIF
 
-%token              TOK_NOT            
-%token              TOK_AND            
-%token              TOK_OR             
+%token              TOK_NOT
+%token              TOK_AND
+%token              TOK_OR
 
-%token              TOK_PRINT          
-%token              TOK_READ           
+%token              TOK_PRINT
+%token              TOK_READ
 
-%token              TOK_WHILE          
-%token              TOK_DO             
-%token              TOK_ENDWHILE       
+%token              TOK_WHILE
+%token              TOK_DO
+%token              TOK_ENDWHILE
 
-%token              TOK_CONTINUE       
-%token              TOK_BREAK          
-%token              TOK_END            
+%token              TOK_FOR
+%token              TOK_TO
+%token              TOK_STEP
+%token              TOK_ENDFOR
 
-%token              TOK_ASSIGN         
+%token              TOK_CONTINUE
+%token              TOK_BREAK
+%token              TOK_END
+
+%token              TOK_ASSIGN
 
 %token<id>          IDENTIFIER
 %token<num>         NUMBER
 %token<str>         STRING
 
-%left               TOK_PLUS           
-%left               TOK_MINUS          
-%left               TOK_MULT           
-%left               TOK_DIV            
-%left               TOK_MOD            
+%left               TOK_PLUS
+%left               TOK_MINUS
+%left               TOK_MULT
+%left               TOK_DIV
+%left               TOK_MOD
 
-%token              TOK_TRUE           
-%token              TOK_FALSE          
+%token              TOK_TRUE
+%token              TOK_FALSE
 
 %token              TOK_LT
-%token              TOK_GT             
-%token              TOK_LTE            
-%token              TOK_GTE            
-%token              TOK_EQ             
+%token              TOK_GT
+%token              TOK_LTE
+%token              TOK_GTE
+%token              TOK_EQEQ
 %token              TOK_NEQ
 
-%token              TOK_LPAREN         
-%token              TOK_RPAREN         
+%token              TOK_PLUSPLUS
+%token              TOK_MINUSMINUS
+
+%token              TOK_LPAREN
+%token              TOK_RPAREN
 
 %type               <node> code
 %type               <node> expression
@@ -123,13 +131,13 @@ char *output_name;
 %type               <node> elif
 %type               <node> else
 %type               <node> while
+%type               <node> for
 %type               <node> statement
 %type               <node> identifier
 %type               <node> number
 %type               <node> string
 %type               <node> binary
 %type               <node> unary
-
 
 %start program
 
@@ -159,6 +167,10 @@ code:
 ;
 
 statement:
+  expression {
+    $$ = g_node_new("statement_expression");
+    g_node_append($$, $1);
+  } |
   assignement  {
     $$ = g_node_new("statement");
     g_node_append($$, $1);
@@ -175,14 +187,18 @@ statement:
     $$ = g_node_new("statement");
     g_node_append($$, $1);
   } |
-  while         {
+  while        {
     $$ = g_node_new("statement");
     g_node_append($$, $1);
   } |
-  TOK_CONTINUE  {
+  for          {
+    $$ = g_node_new("statement");
+    g_node_append($$, $1);
+  } |
+  TOK_CONTINUE {
     $$ = g_node_new("continue");
   } |
-  TOK_BREAK     {
+  TOK_BREAK    {
     $$ = g_node_new("break");
   }
 ;
@@ -279,13 +295,23 @@ while:
   }
 ;
 
+for:
+  TOK_FOR identifier "=" expression TOK_TO expression TOK_DO code TOK_ENDFOR {
+    $$ = g_node_new("for");
+    g_node_append($$, $2);
+    g_node_append($$, $4);
+    g_node_append($$, $6);
+    g_node_append($$, $8);
+  }
+;
+
 expression:
-  binary                            {
-    $$ = g_node_new("binary");
-    g_node_append($$, $1);
-  } |
   unary                             {
     $$ = g_node_new("unary");
+    g_node_append($$, $1);
+  } |
+  binary                            {
+    $$ = g_node_new("binary");
     g_node_append($$, $1);
   } |
   identifier                        {;} |
@@ -341,7 +367,7 @@ binary:
     g_node_append($$, $1);
     g_node_append($$, $3);
   }  |
-  expression TOK_EQ   expression    {
+  expression TOK_EQEQ expression    {
     $$ = g_node_new("eq");
     g_node_append($$, $1);
     g_node_append($$, $3);
@@ -367,7 +393,15 @@ unary:
   TOK_MINUS expression {
     $$ = g_node_new("neg");
     g_node_append($$, $2);
-  }
+  } |
+  expression TOK_PLUS TOK_PLUS {
+    $$ = g_node_new("inc");
+    g_node_append($$, $1);
+  } |
+  expression TOK_MINUS TOK_MINUS {
+    $$ = g_node_new("dec");
+    g_node_append($$, $1);
+  } 
 ;
 
 identifier:
@@ -378,7 +412,6 @@ identifier:
     }
 
     gulong val = (gulong) g_hash_table_lookup(table, strdup($1));
-    printf("Symbol %s has value %ld\n", $1, val);
 
     if (!val) {
       val = g_hash_table_size(table) + 1;
@@ -472,6 +505,9 @@ void emit_code(GNode *node)
     emit_code(g_node_nth_child(node, 0));
     emit_code(g_node_nth_child(node, 1));
 
+  } else if (strcmp(node->data, "statement_expression") == 0) {
+    emit_expression(g_node_nth_child(node, 0)); 
+
   } else if (strcmp(node->data, "statement") == 0) {
     emit_statement(g_node_nth_child(node, 0));
 
@@ -502,6 +538,9 @@ void emit_statement(GNode *node)
 
   } else if (strcmp(node->data, "while") == 0) {
     emit_while(node);
+
+  } else if (strcmp(node->data, "for") == 0) {
+    emit_for(node);
 
   } else {
     fprintf(stderr, "Unknown node: %s\n", (char *)node->data);
@@ -695,25 +734,25 @@ void emit_if(GNode *node)
 void emit_while(GNode *node)
 {
   // Scope
-  int scope = while_scope + 2;
+  int scope = global_scope + 2;
 
-  // If the while_labels array is null, allocate it
-  if (while_labels == NULL) {
-    while_labels = malloc(2 * sizeof(int));
+  // If the global_labels array is null, allocate it
+  if (global_labels == NULL) {
+    global_labels = malloc(2 * sizeof(int));
   }
 
-  // Check if the while_labels array is big enough
-  if (scope >= while_scope) {
-    while_scope += 2;
-    realloc(while_labels, while_scope * sizeof(int));
+  // Check if the global_labels array is big enough
+  if (scope >= global_scope) {
+    global_scope += 2;
+    realloc(global_labels, global_scope * sizeof(int));
   }
 
   // Save the labels in the array
-  while_labels[scope]     = label++;
-  while_labels[scope + 1] = label++;
+  global_labels[scope]     = label++;
+  global_labels[scope + 1] = label++;
 
-  int while_start_label = while_labels[scope];
-  int while_end_label   = while_labels[scope + 1];
+  int while_start_label = global_labels[scope];
+  int while_end_label   = global_labels[scope + 1];
 
   // The Label
   emit_label(while_start_label);
@@ -729,7 +768,7 @@ void emit_while(GNode *node)
   emit_code(g_node_nth_child(node, 1));
 
   // Reset the current while
-  current_while = scope;
+  current_scope = scope;
 
   // The jump
   emit_instruction();
@@ -739,20 +778,25 @@ void emit_while(GNode *node)
   emit_label(while_end_label);
 
   // Reset the current while
-  while_scope -= 2;
-  realloc(while_labels, while_scope * sizeof(int));
+  global_scope -= 2;
+  realloc(global_labels, global_scope * sizeof(int));
+}
+
+void emit_for(GNode *node)
+{
+  // Not implemented yet
 }
 
 void emit_continue()
 {
   emit_instruction();
-  fprintf(yyout, "\tbr LB_%04x\n", while_labels[while_scope]);
+  fprintf(yyout, "\tbr LB_%04x\n", global_labels[global_scope]);
 }
 
 void emit_break()
 {
   emit_instruction();
-  fprintf(yyout, "\tbr LB_%04x\n", while_labels[while_scope + 1]);
+  fprintf(yyout, "\tbr LB_%04x\n", global_labels[global_scope + 1]);
 }
 
 void emit_expression(GNode *node)
@@ -851,15 +895,29 @@ void emit_unary(GNode *node)
 {
   // Emit a nop before the unary expression
   emit_nop();
+  emit_expression(g_node_nth_child(node, 0));
 
   if (strcmp(node->data, "neg") == 0) {
-    emit_expression(g_node_nth_child(node, 0));
     emit_instruction();
     fprintf(yyout, "\tneg\n");
+
+  } else if (strcmp(node->data, "inc") == 0) {
+    emit_instruction();
+    fprintf(yyout, "\tldc.i4.1\n");
+    emit_instruction();
+    fprintf(yyout, "\tadd\n");
+
+  } else if (strcmp(node->data, "dec") == 0) {
+    emit_instruction();
+    fprintf(yyout, "\tldc.i4.1\n");
+    emit_instruction();
+    fprintf(yyout, "\tsub\n");
 
   } else {
     fprintf(stderr, "Unknown node: %s\n", (char *)node->data);
   }
+  
+  emit_nop();
 }
 
 void emit_number(GNode *node)
