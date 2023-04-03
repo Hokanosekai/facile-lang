@@ -1,0 +1,12 @@
+// nested_while.ez
+read a
+
+while a != 0 do
+  print a
+  a := a - 1
+  b := 10
+  while b != 0 do
+    print "\t" b
+    b := b - 1
+  endwhile
+endwhile

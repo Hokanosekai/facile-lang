@@ -1,0 +1,14 @@
+// elif.ez
+read a
+
+if a == 1 then
+  print "a == 1"
+elif a == 2 then
+  print "a == 2"
+elif a == 3 then
+  print "a == 3"
+elif a == 4 then
+  print "a == 4"
+else
+  print "a != 1 and a != 2 and a != 3 and a != 4"
+endif

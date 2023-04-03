@@ -1,0 +1,10 @@
+// while_continue.ez
+read a
+
+while a != 0 do
+  a := a - 1
+  if a == 5 then
+    continue
+  endif
+  print a
+endwhile
