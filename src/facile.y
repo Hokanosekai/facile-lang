@@ -33,6 +33,7 @@ void emit_if(GNode* node);
 void emit_while(GNode* node);
 void emit_continue();
 void emit_break();
+void emit_exit();
 void emit_for(GNode* node);
 
 // Expressions
@@ -52,6 +53,8 @@ int maxstack = 0;
 
 int instr = 0;
 int label = 0;
+
+int exit_label = 0;
 
 int global_scope = 0;
 int current_scope = 0;
@@ -92,7 +95,7 @@ char *output_name;
 
 %token              TOK_CONTINUE
 %token              TOK_BREAK
-%token              TOK_END
+%token              TOK_EXIT
 
 %token              TOK_ASSIGN
 
@@ -115,6 +118,7 @@ char *output_name;
 %token              TOK_GTE
 %token              TOK_EQEQ
 %token              TOK_NEQ
+%token              TOK_EQ
 
 %token              TOK_PLUSPLUS
 %token              TOK_MINUSMINUS
@@ -200,6 +204,9 @@ statement:
   } |
   TOK_BREAK    {
     $$ = g_node_new("break");
+  } |
+  TOK_EXIT     {
+    $$ = g_node_new("exit");
   }
 ;
 
@@ -296,7 +303,7 @@ while:
 ;
 
 for:
-  TOK_FOR identifier "=" expression TOK_TO expression TOK_DO code TOK_ENDFOR {
+  TOK_FOR identifier TOK_EQ expression TOK_TO expression TOK_DO code TOK_ENDFOR {
     $$ = g_node_new("for");
     g_node_append($$, $2);
     g_node_append($$, $4);
@@ -394,11 +401,11 @@ unary:
     $$ = g_node_new("neg");
     g_node_append($$, $2);
   } |
-  expression TOK_PLUS TOK_PLUS {
+  identifier TOK_PLUS TOK_PLUS {
     $$ = g_node_new("inc");
     g_node_append($$, $1);
   } |
-  expression TOK_MINUS TOK_MINUS {
+  identifier TOK_MINUS TOK_MINUS {
     $$ = g_node_new("dec");
     g_node_append($$, $1);
   } 
@@ -456,6 +463,8 @@ void emit_locals(int n)
 
 void begin_code()
 {
+  exit_label = label++;
+
   fprintf(yyout, ".assembly extern mscorlib {}\n");
   fprintf(yyout, ".assembly %s {}\n", output_name);
   fprintf(yyout, ".method static void Main()\n");
@@ -467,6 +476,7 @@ void begin_code()
 
 void end_code()
 {
+  emit_label(exit_label);
   emit_instruction();
   fprintf(yyout, "\tret\n");
   fprintf(yyout, "}\n");
@@ -495,6 +505,12 @@ void emit_ret()
   fprintf(yyout, "\tret\n");
 }
 
+void emit_exit()
+{
+  emit_instruction();
+  fprintf(yyout, "\tbr LB_%04x\n", exit_label);
+}
+
 void emit_code(GNode *node)
 {
   if (node == NULL) {
@@ -516,6 +532,9 @@ void emit_code(GNode *node)
 
   } else if (strcmp(node->data, "break") == 0) {
     emit_break();
+
+  } else if (strcmp(node->data, "exit") == 0) {
+    emit_exit();
 
   } else {
     fprintf(stderr, "Unknown node: %s\n", (char *)node->data);
@@ -784,7 +803,63 @@ void emit_while(GNode *node)
 
 void emit_for(GNode *node)
 {
-  // Not implemented yet
+  // Scope
+  int scope = global_scope + 3;
+
+  // If the global_labels array is null, allocate it
+  if (global_labels == NULL) {
+    global_labels = malloc(3 * sizeof(int));
+  }
+
+  // Check if the global_labels array is big enough
+  if (scope >= global_scope) {
+    global_scope += 3;
+    realloc(global_labels, global_scope * sizeof(int));
+  }
+
+  // Save the labels in the array
+  global_labels[scope]     = label++;
+  global_labels[scope + 1] = label++;
+  global_labels[scope + 2] = label++;
+
+  int for_start_label = global_labels[scope];
+  int for_end_label   = global_labels[scope + 1];
+  int for_step_label  = global_labels[scope + 2];
+
+  // The initialization
+  emit_instruction();
+  
+
+  // The Label
+  emit_label(for_start_label);
+
+  // The condition
+  emit_expression(g_node_nth_child(node, 1));
+
+  // The jump
+  emit_instruction();
+  fprintf(yyout, "\tbrfalse LB_%04x\n", for_end_label);
+
+  // The code
+  emit_code(g_node_nth_child(node, 3));
+
+  // Reset the current for
+  current_scope = scope;
+
+  // The step
+  emit_label(for_step_label);
+  emit_expression(g_node_nth_child(node, 2));
+
+  // The jump
+  emit_instruction();
+  fprintf(yyout, "\tbr LB_%04x\n", for_start_label);
+
+  // The Label
+  emit_label(for_end_label);
+
+  // Reset the current for
+  global_scope -= 3;
+  realloc(global_labels, global_scope * sizeof(int));
 }
 
 void emit_continue()
@@ -893,9 +968,12 @@ void emit_binary(GNode *node)
 
 void emit_unary(GNode *node)
 {
+  GNode *child = g_node_nth_child(node, 0);
+  printf("Data: %s\n", (char *)child->data);
+
   // Emit a nop before the unary expression
   emit_nop();
-  emit_expression(g_node_nth_child(node, 0));
+  emit_expression(child);
 
   if (strcmp(node->data, "neg") == 0) {
     emit_instruction();
@@ -907,17 +985,23 @@ void emit_unary(GNode *node)
     emit_instruction();
     fprintf(yyout, "\tadd\n");
 
+    // Store the result
+    emit_instruction();
+    fprintf(yyout, "\tstloc %ld\n", (long)g_node_nth_child(child, 0)->data - 1);
+
   } else if (strcmp(node->data, "dec") == 0) {
     emit_instruction();
     fprintf(yyout, "\tldc.i4.1\n");
     emit_instruction();
     fprintf(yyout, "\tsub\n");
 
+    // Store the result
+    emit_instruction();
+    fprintf(yyout, "\tstloc %ld\n", (long)g_node_nth_child(child, 0)->data - 1);
+
   } else {
     fprintf(stderr, "Unknown node: %s\n", (char *)node->data);
   }
-  
-  emit_nop();
 }
 
 void emit_number(GNode *node)

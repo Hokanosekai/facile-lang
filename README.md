@@ -1,6 +1,7 @@
 <div align="center">
 
-![Logo de mon projet](./img/logo_univ.png)
+![Logo de mon projet](https://i.imgur.com/20BnGq1.png)
+
 ### Auteurs
 *Bash62*
 *Hokanosekai*
@@ -56,7 +57,6 @@ Projet de compilation : FLEX/BISON
   - [Exercice 10 (Le pgcd)](#exercice-10-le-pgcd)
   - [Exercice Bonus (Fibonacci, nombre premier)](#exercice-bonus-fibonacci-nombre-premier)
 - [Resources](#resources)
-- [Authors](#authors)
 - [License](#license)
 
 # Introduction
@@ -334,7 +334,7 @@ La gestion des erreurs est une partie importante d'un compilateur cependant nous
 - [ILASM](https://learn.microsoft.com/en-us/dotnet/framework/tools/ilasm-exe-il-assembler)
 
 ```bash
-sudo apt-get install flex bison gcc mono-devel mono-mcs libglib2.0-dev ilasm -y
+sudo apt-get install flex bison gcc libglib2.0-dev mono-mcs mono-utils mono-devel -y
 ```
 
 ## Installation
