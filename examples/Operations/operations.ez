@@ -1,0 +1,12 @@
+// operations.ez
+a := 1 + 1
+b := 2 - 1
+c := 3 * 2
+d := 4 / 2
+e := 5 % 2
+
+print a // 2
+print b // 1
+print c // 6
+print d // 2
+print e // 1

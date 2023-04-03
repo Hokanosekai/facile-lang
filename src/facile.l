@@ -44,7 +44,7 @@ void end_code();
 
 "continue"                  {return TOK_CONTINUE;}
 "break"                     {return TOK_BREAK;}
-"end"                       {return TOK_END;}
+"exit"                      {return TOK_EXIT;}
 
 "true"                      {return TOK_TRUE;}
 "false"                     {return TOK_FALSE;}
@@ -55,6 +55,7 @@ void end_code();
 ">="                        {return TOK_GTE;}
 "<="                        {return TOK_LTE;}
 "!="                        {return TOK_NEQ;}
+"="                         {return TOK_EQ;}
 
 "+"                         {return TOK_PLUS;}
 "-"                         {return TOK_MINUS;}

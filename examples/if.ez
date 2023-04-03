@@ -1,6 +1,0 @@
-read a
-if a < 10 then
-    print a
-endif
-
-print 10

@@ -1,7 +1,7 @@
+// pgcd.ez
+
 read "Premier nombre ? " a
 read "Deuxième nombre ? " b
-
-// test
 
 while b != 0 do
     c := a

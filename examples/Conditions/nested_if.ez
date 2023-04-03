@@ -1,0 +1,11 @@
+// nested_if.ez
+read a
+
+if a >= 18 then
+  print "Vous êtes majeur"
+  if a >= 21 then
+    print "Vous pouvez boire de l'alcool"
+  else
+    print "Vous pouvez boire de l'alcool en France"
+  endif
+endif
