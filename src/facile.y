@@ -803,63 +803,7 @@ void emit_while(GNode *node)
 
 void emit_for(GNode *node)
 {
-  // Scope
-  int scope = global_scope + 3;
-
-  // If the global_labels array is null, allocate it
-  if (global_labels == NULL) {
-    global_labels = malloc(3 * sizeof(int));
-  }
-
-  // Check if the global_labels array is big enough
-  if (scope >= global_scope) {
-    global_scope += 3;
-    realloc(global_labels, global_scope * sizeof(int));
-  }
-
-  // Save the labels in the array
-  global_labels[scope]     = label++;
-  global_labels[scope + 1] = label++;
-  global_labels[scope + 2] = label++;
-
-  int for_start_label = global_labels[scope];
-  int for_end_label   = global_labels[scope + 1];
-  int for_step_label  = global_labels[scope + 2];
-
-  // The initialization
-  emit_instruction();
   
-
-  // The Label
-  emit_label(for_start_label);
-
-  // The condition
-  emit_expression(g_node_nth_child(node, 1));
-
-  // The jump
-  emit_instruction();
-  fprintf(yyout, "\tbrfalse LB_%04x\n", for_end_label);
-
-  // The code
-  emit_code(g_node_nth_child(node, 3));
-
-  // Reset the current for
-  current_scope = scope;
-
-  // The step
-  emit_label(for_step_label);
-  emit_expression(g_node_nth_child(node, 2));
-
-  // The jump
-  emit_instruction();
-  fprintf(yyout, "\tbr LB_%04x\n", for_start_label);
-
-  // The Label
-  emit_label(for_end_label);
-
-  // Reset the current for
-  global_scope -= 3;
-  realloc(global_labels, global_scope * sizeof(int));
 }
 
 void emit_continue()
