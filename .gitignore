@@ -57,6 +57,7 @@ build/*
 *.exe
 
 *.pdf
+*.py
 
 # Old readme 
 README_CR.md
