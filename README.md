@@ -531,8 +531,10 @@ Il est également possible d'effectuer des opérations sur des variables.
 a := 1
 
 a := a + 1
+// ou
+a++
 
-print a++ // 3
+print a
 ```
 
 ## Boucles
@@ -552,10 +554,6 @@ endwhile
 ```
 
 ### For
-
-> /!\ La boucle `for` n'est pas encore implémentée. /!\
-
-**TODO** : Implémenter la génération du code `CIL` pour la boucle `for`.
 
 La boucle `for` permet d'exécuter du code un nombre défini de fois.
 
@@ -594,7 +592,7 @@ print "PGCD : " a + b
 
 ## Fibonacci
 
-> Note : Nous utilisons le while pour la boucle car la boucle for n'est pas encore implémentée.
+> Note : Nous utilisons le while pour la boucle car la boucle for n'était pas encore implémentée.
 
 ```c
 // fibonacci.ez

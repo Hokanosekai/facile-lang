@@ -4,10 +4,7 @@ read "b ? " b
 
 if (a == 0) or (b == 0) then
   print "a ou b == 0"
-  if a == 2 then
-    print "a == 2"
-  endif
   exit
 endif
 
-print "a et b != 0"
+print "a ou b != 0"

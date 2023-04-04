@@ -40,6 +40,7 @@ void emit_for(GNode* node);
 void emit_expression(GNode* node);
 void emit_binary(GNode* node);
 void emit_unary(GNode* node);
+void emit_logical(GNode* node);
 
 // Literals
 void emit_identifier(GNode* node);
@@ -62,6 +63,11 @@ int *global_labels = NULL;
 
 char *output_name;
 
+int if_end_label = 0;
+int if_else_label = 0;
+int *if_elif_labels = NULL;
+int if_next_label = 0;
+
 %}
 
 %union {
@@ -78,8 +84,8 @@ char *output_name;
 %token              TOK_ENDIF
 
 %token              TOK_NOT
-%token              TOK_AND
-%token              TOK_OR
+%left               TOK_AND
+%left               TOK_OR
 
 %token              TOK_PRINT
 %token              TOK_READ
@@ -141,6 +147,7 @@ char *output_name;
 %type               <node> number
 %type               <node> string
 %type               <node> binary
+%type               <node> logical
 %type               <node> unary
 
 %start program
@@ -303,14 +310,14 @@ while:
 ;
 
 for:
-  TOK_FOR identifier TOK_EQ expression TOK_TO expression TOK_DO code TOK_ENDFOR {
+  TOK_FOR identifier TOK_ASSIGN expression TOK_TO expression TOK_DO code TOK_ENDFOR {
     $$ = g_node_new("for");
     g_node_append($$, $2);
     g_node_append($$, $4);
     g_node_append($$, $6);
     g_node_append($$, $8);
   } |
-  TOK_FOR identifier TOK_EQ expression TOK_TO expression TOK_STEP expression TOK_DO code TOK_ENDFOR {
+  TOK_FOR identifier TOK_ASSIGN expression TOK_TO expression TOK_STEP expression TOK_DO code TOK_ENDFOR {
     $$ = g_node_new("for");
     g_node_append($$, $2);
     g_node_append($$, $4);
@@ -327,6 +334,10 @@ expression:
   } |
   binary                            {
     $$ = g_node_new("binary");
+    g_node_append($$, $1);
+  } |
+  logical                           {
+    $$ = g_node_new("logical");
     g_node_append($$, $1);
   } |
   identifier                        {;} |
@@ -391,16 +402,6 @@ binary:
     $$ = g_node_new("neq");
     g_node_append($$, $1);
     g_node_append($$, $3);
-  } |
-  expression TOK_AND  expression    {
-    $$ = g_node_new("and");
-    g_node_append($$, $1);
-    g_node_append($$, $3);
-  } |
-  expression TOK_OR   expression    {
-    $$ = g_node_new("or");
-    g_node_append($$, $1);
-    g_node_append($$, $3);
   }
 ;
 
@@ -417,6 +418,29 @@ unary:
     $$ = g_node_new("dec");
     g_node_append($$, $1);
   } 
+;
+
+logical:
+  TOK_NOT expression {
+    $$ = g_node_new("not");
+    g_node_append($$, $2);
+  } |
+  TOK_TRUE {
+    $$ = g_node_new("true");
+  } |
+  TOK_FALSE {
+    $$ = g_node_new("false");
+  } |
+  expression TOK_AND expression {
+    $$ = g_node_new("and");
+    g_node_append($$, $1);
+    g_node_append($$, $3);
+  } |
+  expression TOK_OR expression {
+    $$ = g_node_new("or");
+    g_node_append($$, $1);
+    g_node_append($$, $3);
+  }
 ;
 
 identifier:
@@ -672,9 +696,6 @@ void emit_if(GNode *node)
     printf("There is an else\n");
   }
 
-  // The condition
-  emit_expression(condition);
-
   // Label
   int end_label = label++;
   int else_label;
@@ -703,6 +724,9 @@ void emit_if(GNode *node)
       : else_label
     : end_label;
 
+  // The condition
+  emit_expression(condition);
+
   emit_instruction();
   fprintf(yyout, "\tbrfalse LB_%04x\n", next_label);
 
@@ -727,6 +751,7 @@ void emit_if(GNode *node)
     // Branch the next elif block if the condition is false
     emit_instruction();
     fprintf(yyout, "\tbrfalse LB_%04x\n", next_label);
+
     // The code
     emit_code(g_node_nth_child(elif_node, 1));
 
@@ -914,6 +939,10 @@ void emit_expression(GNode *node)
   } else if (strcmp(node->data, "unary") == 0) {
     emit_unary(g_node_nth_child(node, 0));
 
+  } else if (strcmp(node->data, "logical") == 0) {
+    printf("node count: %d\n", g_node_n_children(node));
+    emit_logical(g_node_nth_child(node, 0));
+
   } else if (strcmp(node->data, "number") == 0) {
     emit_number(node);
 
@@ -977,14 +1006,6 @@ void emit_binary(GNode *node)
     emit_instruction();
     fprintf(yyout, "\tcgt\n");
 
-  } else if (strcmp(node->data, "and") == 0) {
-    emit_instruction();
-    fprintf(yyout, "\tand\n");
-
-  } else if (strcmp(node->data, "or") == 0) {
-    emit_instruction();
-    fprintf(yyout, "\tor\n");
-
   // neq => !=
   } else if (strcmp(node->data, "neq") == 0) {
     emit_instruction();
@@ -993,6 +1014,36 @@ void emit_binary(GNode *node)
     fprintf(yyout, "\tldc.i4.0\n");
     emit_instruction();
     fprintf(yyout, "\tceq\n");
+  } else {
+    fprintf(stderr, "Unknown node: %s\n", (char *)node->data);
+  }
+}
+
+void emit_logical(GNode *node)
+{
+  printf("node: %s\n", (char *)node->data);
+  printf("node count: %d\n", g_node_n_children(node));
+
+  // The operator
+  if (strcmp(node->data, "and") == 0) {
+    // The left
+    emit_expression(g_node_nth_child(node, 0));
+
+    // The right
+    emit_expression(g_node_nth_child(node, 1));
+
+    emit_instruction();
+    fprintf(yyout, "\tand\n");
+
+  } else if (strcmp(node->data, "or") == 0) {
+    // The left
+    emit_expression(g_node_nth_child(node, 0));
+    // The right
+    emit_expression(g_node_nth_child(node, 1));
+
+    emit_instruction();
+    fprintf(yyout, "\tor\n");
+
   } else {
     fprintf(stderr, "Unknown node: %s\n", (char *)node->data);
   }
