@@ -2,5 +2,7 @@
 a := 1
 
 a := a + 1
+// ou
+a++
 
-print a++ // 3
+print a

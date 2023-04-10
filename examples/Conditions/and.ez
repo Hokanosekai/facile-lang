@@ -1,0 +1,10 @@
+// and.ez
+read "a ? " a
+read "b ? " b
+
+if (a == 0) and (b == 0) then
+  print "a et b == 0"
+  exit
+endif
+
+print "a et b != 0"
