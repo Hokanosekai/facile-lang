@@ -1,4 +1,4 @@
-// bool.ez
+// true_false.ez
 read "a ? " a
 
 if (a == 0) or true then
