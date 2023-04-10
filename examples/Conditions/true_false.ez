@@ -1,0 +1,8 @@
+// true_false.ez
+read "a ? " a
+
+if (a == 0) or true then
+  print "a is 0"
+else
+  print "a is not 0"
+endif

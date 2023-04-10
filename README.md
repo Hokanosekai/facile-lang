@@ -499,6 +499,21 @@ else
 endif
 ```
 
+### True / False
+
+Les valeurs `true` et `false` sont définies par les symboles `TOK_TRUE` et `TOK_FALSE`.
+
+```c
+// true_false.ez
+read "a ? " a
+
+if (a == 0) or true then
+  print "a is 0"
+else
+  print "a is not 0"
+endif
+```
+
 ## Opérations
 
 Les opérations sont définies par les symboles suivants :
