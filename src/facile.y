@@ -46,6 +46,7 @@ void emit_logical(GNode* node);
 void emit_identifier(GNode* node);
 void emit_number(GNode* node);
 void emit_string(GNode* node);
+void emit_boolean(GNode* node);
 
 void begin_code();
 void end_code();
@@ -344,6 +345,12 @@ expression:
   number                            {;} |
   TOK_LPAREN expression TOK_RPAREN  {
     $$ = $2;
+  } |
+  TOK_TRUE {
+    $$ = g_node_new("true");
+  } |
+  TOK_FALSE {
+    $$ = g_node_new("false");
   }
 ;
 
@@ -424,12 +431,6 @@ logical:
   TOK_NOT expression {
     $$ = g_node_new("not");
     g_node_append($$, $2);
-  } |
-  TOK_TRUE {
-    $$ = g_node_new("true");
-  } |
-  TOK_FALSE {
-    $$ = g_node_new("false");
   } |
   expression TOK_AND expression {
     $$ = g_node_new("and");
@@ -949,6 +950,9 @@ void emit_expression(GNode *node)
   } else if (strcmp(node->data, "identifier") == 0) {
     emit_identifier(node);
 
+  } else if (strcmp(node->data, "true") == 0 || strcmp(node->data, "false") == 0) {
+    emit_boolean(node);
+
   } else {
     fprintf(stderr, "Unknown node: %s\n", (char *)node->data);
   }
@@ -1084,6 +1088,16 @@ void emit_unary(GNode *node)
 
   } else {
     fprintf(stderr, "Unknown node: %s\n", (char *)node->data);
+  }
+}
+
+void emit_boolean(GNode *node)
+{
+  emit_instruction();
+  if (strcmp(node->data, "true") == 0) {
+    fprintf(yyout, "\tldc.i4.1\n");
+  } else {
+    fprintf(yyout, "\tldc.i4.0\n");
   }
 }
 
