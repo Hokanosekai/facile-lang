@@ -73,7 +73,7 @@ void end_code();
 
 \".*\"                      {yylval.str = strdup(yytext);return STRING;}
 
-"//".*                      {ECHO;}
+"//".*                      ;
 
 [ \t\n]                     ;
 .                           {ECHO; yyerror("Unexpected character");}
