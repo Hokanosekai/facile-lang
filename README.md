@@ -40,6 +40,7 @@ Projet de compilation : FLEX/BISON
     - [If](#if)
     - [Else](#else)
     - [Elif](#elif)
+    - [True / False](#true--false)
   - [Opérations](#opérations)
   - [Boucles](#boucles)
     - [While](#while)
@@ -551,6 +552,8 @@ a++
 
 print a
 ```
+
+> /!\ Les opérations `++` et `--` ne sont plus supportées. (Voir [Issue #9](https://github.com/Hokanosekai/facile-lang/issues/9))
 
 ## Boucles
 

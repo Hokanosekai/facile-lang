@@ -61,3 +61,5 @@ build/*
 
 # Old readme 
 README_CR.md
+
+.vscode/*

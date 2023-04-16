@@ -1,8 +1,4 @@
-// bool.ez
-read "a ? " a
+a := 1
+b := 3
 
-if (a == 0) or true then
-  print "a is 0"
-else
-  print "a is not 0"
-endif
+print a
