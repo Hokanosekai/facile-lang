@@ -355,57 +355,57 @@ expression:
 ;
 
 binary:
-  expression TOK_PLUS   expression  {
+  expression TOK_PLUS expression {
     $$ = g_node_new("add");
     g_node_append($$, $1);
     g_node_append($$, $3);
   } |
-  expression TOK_MINUS  expression  {
+  expression TOK_MINUS expression {
     $$ = g_node_new("sub");
     g_node_append($$, $1);
     g_node_append($$, $3);
   } |
-  expression TOK_MULT   expression  {
+  expression TOK_MULT expression {
     $$ = g_node_new("mul");
     g_node_append($$, $1);
     g_node_append($$, $3);
   } |
-  expression TOK_DIV    expression  {
+  expression TOK_DIV expression {
     $$ = g_node_new("div");
     g_node_append($$, $1);
     g_node_append($$, $3);
   } |
-  expression TOK_MOD    expression  {
+  expression TOK_MOD expression {
     $$ = g_node_new("mod");
     g_node_append($$, $1);
     g_node_append($$, $3);
   } |
-  expression TOK_LT   expression    {
+  expression TOK_LT expression {
     $$ = g_node_new("lt");
     g_node_append($$, $1);
     g_node_append($$, $3);
   }   |
-  expression TOK_GT   expression    {
+  expression TOK_GT expression {
     $$ = g_node_new("gt");
     g_node_append($$, $1);
     g_node_append($$, $3);
   }   |
-  expression TOK_LTE  expression    {
+  expression TOK_LTE expression {
     $$ = g_node_new("lte");
     g_node_append($$, $1);
     g_node_append($$, $3);
   }  |
-  expression TOK_GTE  expression    {
+  expression TOK_GTE expression {
     $$ = g_node_new("gte");
     g_node_append($$, $1);
     g_node_append($$, $3);
   }  |
-  expression TOK_EQEQ expression    {
+  expression TOK_EQEQ expression {
     $$ = g_node_new("eq");
     g_node_append($$, $1);
     g_node_append($$, $3);
   }  |
-  expression TOK_NEQ  expression    {
+  expression TOK_NEQ expression {
     $$ = g_node_new("neq");
     g_node_append($$, $1);
     g_node_append($$, $3);
@@ -416,15 +416,7 @@ unary:
   TOK_MINUS expression {
     $$ = g_node_new("neg");
     g_node_append($$, $2);
-  } |
-  identifier TOK_PLUS TOK_PLUS {
-    $$ = g_node_new("inc");
-    g_node_append($$, $1);
-  } |
-  identifier TOK_MINUS TOK_MINUS {
-    $$ = g_node_new("dec");
-    g_node_append($$, $1);
-  } 
+  }
 ;
 
 logical:
@@ -677,25 +669,11 @@ void emit_if(GNode *node)
       ? g_node_nth_child(node, 2)
       : NULL;
 
-  printf("There is %d children\n", g_node_n_children(node));
-  
   GNode *elif_node = g_node_n_children(node) == 4
     ? g_node_nth_child(node, 2)
     : g_node_n_children(node) == 3 && strcmp(g_node_nth_child(node, 2)->data, "elif") == 0
       ? g_node_nth_child(node, 2)
       : NULL;
-
-  if (elif_node == NULL) {
-    printf("There is no elif\n");
-  } else {
-    printf("There is an elif\n");
-  }
-
-  if (else_node == NULL) {
-    printf("There is no else\n");
-  } else {
-    printf("There is an else\n");
-  }
 
   // Label
   int end_label = label++;
@@ -710,9 +688,7 @@ void emit_if(GNode *node)
 
   // If there is an elif we count them and allocate the labels
   if (elif_node != NULL) {
-    printf("Elif node: %s\n", (char *)elif_node->data);
     n = count_nodes(elif_node, "elif");
-    printf("There are %d elifs\n", n);
     elif_labels = malloc(n * sizeof(int));
     for (int i = 0; i < n; i++) {
       elif_labels[i] = label++;
@@ -941,7 +917,6 @@ void emit_expression(GNode *node)
     emit_unary(g_node_nth_child(node, 0));
 
   } else if (strcmp(node->data, "logical") == 0) {
-    printf("node count: %d\n", g_node_n_children(node));
     emit_logical(g_node_nth_child(node, 0));
 
   } else if (strcmp(node->data, "number") == 0) {
@@ -1025,9 +1000,6 @@ void emit_binary(GNode *node)
 
 void emit_logical(GNode *node)
 {
-  printf("node: %s\n", (char *)node->data);
-  printf("node count: %d\n", g_node_n_children(node));
-
   // The operator
   if (strcmp(node->data, "and") == 0) {
     // The left
@@ -1056,7 +1028,6 @@ void emit_logical(GNode *node)
 void emit_unary(GNode *node)
 {
   GNode *child = g_node_nth_child(node, 0);
-  printf("Data: %s\n", (char *)child->data);
 
   // Emit a nop before the unary expression
   emit_nop();
